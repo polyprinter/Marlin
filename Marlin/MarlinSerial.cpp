@@ -23,7 +23,7 @@
 #include "Marlin.h"
 #include "MarlinSerial.h"
 
-#if MOTHERBOARD != 8 // !teensylu
+#if !defined(__AVR_AT90USB1286__) && !defined(__AVR_AT90USB1287__)
 // this next line disables the entire HardwareSerial.cpp, 
 // this is so I can support Attiny series and any other chip without a uart
 #if defined(UBRRH) || defined(UBRR0H) || defined(UBRR1H) || defined(UBRR2H) || defined(UBRR3H)
@@ -325,5 +325,5 @@ void MarlinSerial::printFloat(double number, uint8_t digits)
 MarlinSerial MSerial;
 
 #endif // whole file
-#endif //teensylu
+#endif //!(__AVR_AT90USB1286__)&&!defined(__AVR_AT90USB1287__)
 

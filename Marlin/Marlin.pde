@@ -1420,7 +1420,10 @@ void manage_inactivity(byte debug)
 
 void kill()
 {
-  cli(); // Stop interrupts
+  SERIAL_ERROR_START;
+  SERIAL_ERRORLNPGM("Printer halted. kill() called !!");
+  LCD_MESSAGEPGM("KILLED. ");
+
   disable_heater();
 
   disable_x();
@@ -1429,13 +1432,14 @@ void kill()
   disable_e0();
   disable_e1();
   disable_e2();
-  
+
+  cli(); // Stop interrupts
+
   if(PS_ON_PIN > -1) pinMode(PS_ON_PIN,INPUT);
-  SERIAL_ERROR_START;
-  SERIAL_ERRORLNPGM(MSG_ERR_KILLED);
-  LCD_MESSAGEPGM(MSG_KILLED);
   suicide();
+#if !defined(__AVR_AT90USB1286__) && !defined(__AVR_AT90USB1287__) // this will kill the usb serial so the messages aren't seen 
   while(1); // Wait for reset
+#endif
 }
 
 

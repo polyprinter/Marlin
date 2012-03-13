@@ -46,7 +46,7 @@
 
 #include "WString.h"
 
-#if MOTHERBOARD == 8  // Teensylu
+#if defined(__AVR_AT90USB1286__)||defined(__AVR_AT90USB1287__)
   #define MYSERIAL Serial
 #else
   #define MYSERIAL MSerial

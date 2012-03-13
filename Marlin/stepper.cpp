@@ -437,7 +437,7 @@ ISR(TIMER1_COMPA_vect)
 
     
     for(int8_t i=0; i < step_loops; i++) { // Take multiple steps per interrupt (For high speed moves) 
-      #if MOTHERBOARD != 8 // !teensylu
+      #if !defined(__AVR_AT90USB1286__) && !defined(__AVR_AT90USB1287__)
       MSerial.checkRx(); // Check for serial chars.
       #endif 
       
