@@ -1,3 +1,5 @@
+This version is for supporting Printrboard
+
 WARNING: 
 --------
 THIS IS RELEASE CANDIDATE 2 FOR MARLIN 1.0.0
