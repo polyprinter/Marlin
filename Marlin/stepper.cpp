@@ -54,7 +54,6 @@ volatile static unsigned long step_events_completed; // The number of step event
   static long old_advance = 0;
 #endif
 static long e_steps[3];
-static unsigned char busy = false; // TRUE when SIG_OUTPUT_COMPARE1A is being serviced. Used to avoid retriggering that handler.
 static long acceleration_time, deceleration_time;
 //static unsigned long accelerate_until, decelerate_after, acceleration_rate, initial_rate, final_rate, nominal_rate;
 static unsigned short acc_step_rate; // needed for deccelaration start point
@@ -83,11 +82,7 @@ volatile char count_direction[NUM_AXIS] = { 1, 1, 1, 1};
 //=============================functions         ============================
 //===========================================================================
 
-#ifdef ENDSTOPS_ONLY_FOR_HOMING
   #define CHECK_ENDSTOPS  if(check_endstops)
-#else
-  #define CHECK_ENDSTOPS
-#endif
 
 // intRes = intIn1 * intIn2 >> 16
 // uses:
@@ -216,7 +211,6 @@ void enable_endstops(bool check)
 
 void st_wake_up() {
   //  TCNT1 = 0;
-  if(busy == false) 
   ENABLE_STEPPER_DRIVER_INTERRUPT();  
 }
 
@@ -267,12 +261,10 @@ FORCE_INLINE void trapezoid_generator_reset() {
   #endif
   deceleration_time = 0;
   // step_rate to timer interval
+  OCR1A_nominal = calc_timer(current_block->nominal_rate);
   acc_step_rate = current_block->initial_rate;
   acceleration_time = calc_timer(acc_step_rate);
   OCR1A = acceleration_time;
-  OCR1A_nominal = calc_timer(current_block->nominal_rate);
-  
-
   
 //    SERIAL_ECHO_START;
 //    SERIAL_ECHOPGM("advance :");
@@ -295,6 +287,7 @@ ISR(TIMER1_COMPA_vect)
     // Anything in the buffer?
     current_block = plan_get_current_block();
     if (current_block != NULL) {
+      current_block->busy = true;
       trapezoid_generator_reset();
       counter_x = -(current_block->step_event_count >> 1);
       counter_y = counter_x;
@@ -664,51 +657,48 @@ void st_init()
   #endif
 
   //endstops and pullups
-  #ifdef ENDSTOPPULLUPS
+  
     #if X_MIN_PIN > -1
       SET_INPUT(X_MIN_PIN); 
+    #ifdef ENDSTOPPULLUP_XMIN
       WRITE(X_MIN_PIN,HIGH);
     #endif
-    #if X_MAX_PIN > -1
-      SET_INPUT(X_MAX_PIN); 
-      WRITE(X_MAX_PIN,HIGH);
     #endif
+      
     #if Y_MIN_PIN > -1
       SET_INPUT(Y_MIN_PIN); 
+    #ifdef ENDSTOPPULLUP_YMIN
       WRITE(Y_MIN_PIN,HIGH);
     #endif
-    #if Y_MAX_PIN > -1
-      SET_INPUT(Y_MAX_PIN); 
-      WRITE(Y_MAX_PIN,HIGH);
     #endif
+  
     #if Z_MIN_PIN > -1
       SET_INPUT(Z_MIN_PIN); 
+    #ifdef ENDSTOPPULLUP_ZMIN
       WRITE(Z_MIN_PIN,HIGH);
     #endif
-    #if Z_MAX_PIN > -1
-      SET_INPUT(Z_MAX_PIN); 
-      WRITE(Z_MAX_PIN,HIGH);
     #endif
-  #else //ENDSTOPPULLUPS
-    #if X_MIN_PIN > -1
-      SET_INPUT(X_MIN_PIN); 
-    #endif
+      
     #if X_MAX_PIN > -1
       SET_INPUT(X_MAX_PIN); 
+    #ifdef ENDSTOPPULLUP_XMAX
+      WRITE(X_MAX_PIN,HIGH);
     #endif
-    #if Y_MIN_PIN > -1
-      SET_INPUT(Y_MIN_PIN); 
     #endif
+      
     #if Y_MAX_PIN > -1
       SET_INPUT(Y_MAX_PIN); 
+    #ifdef ENDSTOPPULLUP_YMAX
+      WRITE(Y_MAX_PIN,HIGH);
     #endif
-    #if Z_MIN_PIN > -1
-      SET_INPUT(Z_MIN_PIN); 
     #endif
+  
     #if Z_MAX_PIN > -1
       SET_INPUT(Z_MAX_PIN); 
+    #ifdef ENDSTOPPULLUP_ZMAX
+      WRITE(Z_MAX_PIN,HIGH);
     #endif
-  #endif //ENDSTOPPULLUPS
+  #endif
  
 
   //Initialize Step Pins
@@ -773,12 +763,7 @@ void st_init()
     TIMSK0 |= (1<<OCIE0A);
   #endif //ADVANCE
   
-  #ifdef ENDSTOPS_ONLY_FOR_HOMING
-    enable_endstops(false);
-  #else
-    enable_endstops(true);
-  #endif
-  
+  enable_endstops(true); // Start with endstops active. After homing they can be disabled
   sei();
 }
 
