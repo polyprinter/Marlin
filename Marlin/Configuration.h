@@ -86,6 +86,10 @@
 #define HEATER_2_MAXTEMP 250
 #define BED_MAXTEMP 150
 
+// If your bed has low resistance e.g. .6 ohm and throws the fuse you can duty cycle it to reduce the
+// average current. The value should be an integer and the heat bed will be turned on for 1 interval of
+// HEATER_BED_DUTY_CYCLE_DIVIDER intervals.
+//#define HEATER_BED_DUTY_CYCLE_DIVIDER 4
 
 // PID settings:
 // Comment the following line to disable PID and enable bang-bang.
@@ -93,7 +97,7 @@
 #define PID_MAX 255 // limits current to nozzle; 255=full current
 #ifdef PIDTEMP
   //#define PID_DEBUG // Sends debug data to the serial port. 
-  //#define PID_OPENLOOP 1 // Puts PID in open loop. M104 sets the output power in %
+  //#define PID_OPENLOOP 1 // Puts PID in open loop. M104/M140 sets the output power from 0 to PID_MAX
   #define PID_INTEGRAL_DRIVE_MAX 255  //limit for the integral term
   #define K1 0.95 //smoothing factor withing the PID
   #define PID_dT ((16.0 * 8.0)/(F_CPU / 64.0 / 256.0)) //sampling period of the
@@ -115,6 +119,44 @@
 //    #define  DEFAULT_Kd 440
 #endif // PIDTEMP
 
+// Bed Temperature Control
+// Select PID or bang-bang with PIDTEMPBED.  If bang-bang, BED_LIMIT_SWITCHING will enable hysteresis
+//
+// uncomment this to enable PID on the bed.   It uses the same ferquency PWM as the extruder. 
+// If your PID_dT above is the default, and correct for your hardware/configuration, that means 7.689Hz,
+// which is fine for driving a square wave into a resistive load and does not significantly impact you FET heating.
+// This also works fine on a Fotek SSR-10DA Solid State Relay into a 250W heater. 
+// If your configuration is significantly different than this and you don't understand the issues involved, you proabaly 
+// shouldn't use bed PID until someone else verifies your hardware works.
+// If this is enabled, find your own PID constants below.
+//#define PIDTEMPBED
+//
+//#define BED_LIMIT_SWITCHING
+
+// This sets the max power delived to the bed, and replaces the HEATER_BED_DUTY_CYCLE_DIVIDER option.
+// all forms of bed control obey this (PID, bang-bang, bang-bang with hysteresis)
+// setting this to anything other than 255 enables a form of PWM to the bed just like HEATER_BED_DUTY_CYCLE_DIVIDER did,
+// so you shouldn't use it unless you are OK with PWM on your bed.  (see the comment on enabling PIDTEMPBED)
+#define MAX_BED_POWER 255 // limits duty cycle to bed; 255=full current
+
+#ifdef PIDTEMPBED
+//120v 250W silicone heater into 4mm borosilicate (MendelMax 1.5+)
+//from FOPDT model - kp=.39 Tp=405 Tdead=66, Tc set to 79.2, argressive factor of .15 (vs .1, 1, 10)
+    #define  DEFAULT_bedKp 10.00
+    #define  DEFAULT_bedKi .023
+    #define  DEFAULT_bedKd 305.4
+
+//120v 250W silicone heater into 4mm borosilicate (MendelMax 1.5+)
+//from pidautotune
+//    #define  DEFAULT_bedKp 97.1
+//    #define  DEFAULT_bedKi 1.41
+//    #define  DEFAULT_bedKd 1675.16
+
+// FIND YOUR OWN: "M303 E-1 C8 S90" to run autotune on the bed at 90 degreesC for 8 cycles.
+#endif // PIDTEMPBED
+
+
+
 //this prevents dangerous Extruder moves, i.e. if the temperature is under the limit
 //can be software-disabled for whatever purposes by
 #define PREVENT_DANGEROUS_EXTRUDE
@@ -127,6 +169,9 @@
 //===========================================================================
 //=============================Mechanical Settings===========================
 //===========================================================================
+
+// Uncomment the following line to enable CoreXY kinematics
+// #define COREXY
 
 // corse Endstop Settings
 #define ENDSTOPPULLUPS // Comment this out (using // at the start of the line) to disable the endstop pullup resistors
@@ -168,10 +213,10 @@ const bool Z_ENDSTOPS_INVERTING = true; // set to true to invert the logic of th
 #define DISABLE_Z false
 #define DISABLE_E false // For all extruders
 
-#define INVERT_X_DIR true    // for Mendel set to false, for Orca set to true
-#define INVERT_Y_DIR false    // for Mendel set to true, for Orca set to false
-#define INVERT_Z_DIR true     // for Mendel set to false, for Orca set to true
-#define INVERT_E0_DIR false   // for direct drive extruder v9 set to true, for geared extruder set to false
+#define INVERT_X_DIR false    // for Mendel set to false, for Orca set to true
+#define INVERT_Y_DIR true  // for Mendel set to true, for Orca set to false
+#define INVERT_Z_DIR false     // for Mendel set to false, for Orca set to true
+#define INVERT_E0_DIR false  // for direct drive extruder v9 set to true, for geared extruder set to false
 #define INVERT_E1_DIR false    // for direct drive extruder v9 set to true, for geared extruder set to false
 #define INVERT_E2_DIR false   // for direct drive extruder v9 set to true, for geared extruder set to false
 
@@ -183,14 +228,26 @@ const bool Z_ENDSTOPS_INVERTING = true; // set to true to invert the logic of th
 
 #define min_software_endstops true //If true, axis won't move to coordinates less than HOME_POS.
 #define max_software_endstops true  //If true, axis won't move to coordinates greater than the defined lengths below.
-#define X_MAX_LENGTH 205
-#define Y_MAX_LENGTH 205
-#define Z_MAX_LENGTH 200
+// Travel limits after homing
+#define X_MAX_POS 190 //205
+#define X_MIN_POS 0
+#define Y_MAX_POS 190 //205
+#define Y_MIN_POS 0
+#define Z_MAX_POS 200
+#define Z_MIN_POS 0
 
-// The position of the homing switches. Use MAX_LENGTH * -0.5 if the center should be 0, 0, 0
-#define X_HOME_POS 0
-#define Y_HOME_POS 0
-#define Z_HOME_POS 0
+#define X_MAX_LENGTH (X_MAX_POS - X_MIN_POS)
+#define Y_MAX_LENGTH (Y_MAX_POS - Y_MIN_POS)
+#define Z_MAX_LENGTH (Z_MAX_POS - Z_MIN_POS)
+
+// The position of the homing switches
+//#define MANUAL_HOME_POSITIONS  // If defined, manualy programed locations will be used
+//#define BED_CENTER_AT_0_0  // If defined the center of the bed is defined as (0,0)
+
+//Manual homing switch locations:
+#define MANUAL_X_HOME_POS 0
+#define MANUAL_Y_HOME_POS 0
+#define MANUAL_Z_HOME_POS 0
 
 //// MOVEMENT SETTINGS
 #define NUM_AXIS 4 // The axis order in all axis related arrays is X, Y, Z, E
@@ -198,7 +255,7 @@ const bool Z_ENDSTOPS_INVERTING = true; // set to true to invert the logic of th
 
 // default settings 
 
-#define DEFAULT_AXIS_STEPS_PER_UNIT   {78.7402,78.7402,200*8/3,760*1.1}                    // default steps per unit for ultimaker 
+#define DEFAULT_AXIS_STEPS_PER_UNIT   {75.4572,78.964,2254.9403,490}                    // default steps per unit for ultimaker 
 #define DEFAULT_MAX_FEEDRATE          {500, 500, 5, 45}    // (mm/sec)    
 #define DEFAULT_MAX_ACCELERATION      {9000,9000,100,10000}    // X, Y, Z, E maximum start speed for accelerated moves. E default values are good for skeinforge 40+, for older versions raise them a lot.
 
@@ -231,6 +288,13 @@ const bool Z_ENDSTOPS_INVERTING = true; // set to true to invert the logic of th
 
 //#define ULTIMAKERCONTROLLER //as available from the ultimaker online store.
 //#define ULTIPANEL  //the ultipanel as on thingiverse
+//#define VERSAPANEL // Panucatt VersaPanel
+
+#ifdef VERSAPANEL
+ #define ULTIPANEL
+ #define NEWPANEL
+ #define MCP23017_LCD // Adafruit RGB LCD compatibles
+#endif
 
 
 #ifdef ULTIMAKERCONTROLLER    //automatic expansion
@@ -268,6 +332,9 @@ const bool Z_ENDSTOPS_INVERTING = true; // set to true to invert the logic of th
 // M240  Triggers a camera by emulating a Canon RC-1 Remote
 // Data from: http://www.doc-diy.net/photo/rc-1_hacked/
 // #define PHOTOGRAPH_PIN     23
+
+// SF send wrong arc g-codes when using Arc Point as fillet procedure
+//#define SF_ARC_FIX
 
 #include "Configuration_adv.h"
 #include "thermistortables.h"

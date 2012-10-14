@@ -108,6 +108,7 @@
 #define HEATER_2_PIN -1
 #define HEATER_BED_PIN 3
 
+#define KILL_PIN -1
 
 #define SDPOWER -1
 #define SDSS -1 // SCL pin of I2C header
@@ -206,6 +207,7 @@
 	#define SDCARDDETECT -1 		
     #define SUICIDE_PIN -1						//has to be defined; otherwise Power_off doesn't work
 	
+    #define KILL_PIN -1
 	//Pins for 4bit LCD Support 
     #define LCD_PINS_RS 18 
     #define LCD_PINS_ENABLE 17
@@ -267,6 +269,10 @@
 #define Z_MIN_PIN          18
 #define Z_MAX_PIN          19
 
+#define Z2_STEP_PIN        36
+#define Z2_DIR_PIN         34
+#define Z2_ENABLE_PIN      30
+
 #define E0_STEP_PIN        26
 #define E0_DIR_PIN         28
 #define E0_ENABLE_PIN      24
@@ -306,17 +312,21 @@
   //arduino pin which triggers an piezzo beeper
     #define BEEPER 33			// Beeper on AUX-4
 
+#ifndef MCP28017_LCD
     #define LCD_PINS_RS 16 
     #define LCD_PINS_ENABLE 17
     #define LCD_PINS_D4 23
     #define LCD_PINS_D5 25 
     #define LCD_PINS_D6 27
     #define LCD_PINS_D7 29
+#endif // MCP28017_LCD
     
     //buttons are directly attached using AUX-2
     #define BTN_EN1 37
     #define BTN_EN2 35
+#ifndef VERSAPANEL
     #define BTN_ENC 31  //the click
+#endif
     
     #define BLEN_C 2
     #define BLEN_B 1
@@ -539,6 +549,7 @@
     #define LED_PIN         -1    //changed @ rkoeppl 20110410
     #define FAN_PIN         -1    //changed @ rkoeppl 20110410
     #define PS_ON_PIN       -1    //changed @ rkoeppl 20110410
+    #define KILL_PIN        -1    //changed @ drakelive 20120830
     //our pin for debugging.
     
     #define DEBUG_PIN        0
@@ -572,18 +583,33 @@
 
 #define X_STEP_PIN         15
 #define X_DIR_PIN          21
+#if X_HOME_DIR < 0
 #define X_MIN_PIN          18
 #define X_MAX_PIN           -1
+#else
+# define X_MIN_PIN          -1
+# define X_MAX_PIN          18
+#endif
 
 #define Y_STEP_PIN         22
 #define Y_DIR_PIN          23
+#if Y_HOME_DIR < 0
 #define Y_MIN_PIN          19
 #define Y_MAX_PIN          -1
+#else
+# define Y_MIN_PIN          -1
+# define Y_MAX_PIN          19
+#endif
 
 #define Z_STEP_PIN         3
 #define Z_DIR_PIN          2
+#if Z_HOME_DIR < 0
 #define Z_MIN_PIN          20
 #define Z_MAX_PIN          -1
+#else
+# define Z_MIN_PIN          -1
+# define Z_MAX_PIN          20
+#endif
 
 #define E0_STEP_PIN         1
 #define E0_DIR_PIN          0
@@ -934,10 +960,10 @@
 #define HEATER_BED_PIN     14  // Bed
 #define FAN_PIN            16  // Fan
 
-#define TEMP_0_PIN          1  // Extruder
+#define TEMP_0_PIN          1  // Extruder - ANALOG PIN NUMBERING
 #define TEMP_1_PIN         -1
 #define TEMP_2_PIN         -1
-#define TEMP_BED_PIN        0  // Bed
+#define TEMP_BED_PIN        0  // Bed - ANALOG PIN NUMBERING
 
 #define SDPOWER            -1
 #define SDSS                26
@@ -951,6 +977,80 @@
   #define MISO_PIN         22
   #define MOSI_PIN         23
 #endif
+
+#ifdef ULTRA_LCD
+
+  #ifdef NEWPANEL
+  //arduino pin which triggers an piezzo beeper
+    #define BEEPER 33			// Beeper on AUX-4
+
+#ifndef MCP28017_LCD
+    #define LCD_PINS_RS 16 
+    #define LCD_PINS_ENABLE 17
+    #define LCD_PINS_D4 23
+    #define LCD_PINS_D5 25 
+    #define LCD_PINS_D6 27
+    #define LCD_PINS_D7 29
+#endif // MCP28017_LCD
+    
+    //buttons are directly attached using AUX-2
+    #define BTN_EN1 11 // PC1
+    #define BTN_EN2 12 // PC2
+#ifndef VERSAPANEL
+    #define BTN_ENC 31  //the click
+#endif
+    
+    #define BLEN_C 2
+    #define BLEN_B 1
+    #define BLEN_A 0
+    
+    #define SDCARDDETECT -1		// Ramps does not use this port
+    
+      //encoder rotation values
+    #define encrot0 0
+    #define encrot1 2
+    #define encrot2 3
+    #define encrot3 1
+
+  #else //old style panel with shift register
+    //arduino pin witch triggers an piezzo beeper
+    #define BEEPER 33		No Beeper added
+
+    //buttons are attached to a shift register
+	// Not wired this yet
+    //#define SHIFT_CLK 38
+    //#define SHIFT_LD 42
+    //#define SHIFT_OUT 40
+    //#define SHIFT_EN 17
+    
+    #define LCD_PINS_RS 16 
+    #define LCD_PINS_ENABLE 17
+    #define LCD_PINS_D4 23
+    #define LCD_PINS_D5 25 
+    #define LCD_PINS_D6 27
+    #define LCD_PINS_D7 29
+    
+    //encoder rotation values
+    #define encrot0 0
+    #define encrot1 2
+    #define encrot2 3
+    #define encrot3 1
+
+    
+    //bits in the shift register that carry the buttons for:
+    // left up center down right red
+    #define BL_LE 7
+    #define BL_UP 6
+    #define BL_MI 5
+    #define BL_DW 4
+    #define BL_RI 3
+    #define BL_ST 2
+
+    #define BLEN_B 1
+    #define BLEN_A 0
+  #endif 
+#endif //ULTRA_LCD
+
 #endif
 
 /****************************************************************************************

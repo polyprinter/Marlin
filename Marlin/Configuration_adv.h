@@ -5,13 +5,10 @@
 //=============================Thermal Settings  ============================
 //===========================================================================
 
-// Select one of these only to define how the bed temp is read.
-//
-//#define BED_LIMIT_SWITCHING
 #ifdef BED_LIMIT_SWITCHING
   #define BED_HYSTERESIS 2 //only disable heating if T>target+BED_HYSTERESIS and enable heating if T>target-BED_HYSTERESIS
 #endif
-#define BED_CHECK_INTERVAL 5000 //ms
+#define BED_CHECK_INTERVAL 5000 //ms between checks in bang-bang control
 
 //// Heating sanity check:
 // This waits for the watchperiod in milliseconds whenever an M104 or M109 increases the target temperature
@@ -76,7 +73,67 @@
 
 #define ENDSTOPS_ONLY_FOR_HOMING // If defined the endstops will only be used for homing
 
+
+//// AUTOSET LOCATIONS OF LIMIT SWITCHES
+//// Added by ZetaPhoenix 09-15-2012
+#ifdef MANUAL_HOME_POSITION  //Use manual limit switch locations
+  #define X_HOME_POS MANUAL_X_HOME_POS
+  #define Y_HOME_POS MANUAL_Y_HOME_POS
+  #define Z_HOME_POS MANUAL_Z_HOME_POS
+#else //Set min/max homing switch positions based upon homing direction and min/max travel limits
+  //X axis
+  #if X_HOME_DIR == -1
+    #ifdef BED_CENTER_AT_0_0
+      #define X_HOME_POS X_MAX_LENGTH * -0.5
+    #else
+      #define X_HOME_POS X_MIN_POS
+    #endif //BED_CENTER_AT_0_0
+  #else    
+    #ifdef BED_CENTER_AT_0_0
+      #define X_HOME_POS X_MAX_LENGTH * 0.5
+    #else
+      #define X_HOME_POS X_MAX_POS
+    #endif //BED_CENTER_AT_0_0
+  #endif //X_HOME_DIR == -1
+  
+  //Y axis
+  #if Y_HOME_DIR == -1
+    #ifdef BED_CENTER_AT_0_0
+      #define Y_HOME_POS Y_MAX_LENGTH * -0.5
+    #else
+      #define Y_HOME_POS Y_MIN_POS
+    #endif //BED_CENTER_AT_0_0
+  #else    
+    #ifdef BED_CENTER_AT_0_0
+      #define Y_HOME_POS Y_MAX_LENGTH * 0.5
+    #else
+      #define Y_HOME_POS Y_MAX_POS
+    #endif //BED_CENTER_AT_0_0
+  #endif //Y_HOME_DIR == -1
+  
+  // Z axis
+  #if Z_HOME_DIR == -1 //BED_CENTER_AT_0_0 not used
+    #define Z_HOME_POS Z_MIN_POS
+  #else    
+    #define Z_HOME_POS Z_MAX_POS
+  #endif //Z_HOME_DIR == -1
+#endif //End auto min/max positions
+//END AUTOSET LOCATIONS OF LIMIT SWITCHES -ZP
+
+
 //#define Z_LATE_ENABLE // Enable Z the last moment. Needed if your Z driver overheats.
+
+// A single Z stepper driver is usually used to drive 2 stepper motors.
+// Uncomment this define to utilize a separate stepper driver for each Z axis motor.
+// Only a few motherboards support this, like RAMPS, which have dual extruder support (the 2nd, often unused, extruder driver is used
+// to control the 2nd Z axis stepper motor). The pins are currently only defined for a RAMPS motherboards.
+// On a RAMPS (or other 5 driver) motherboard, using this feature will limit you to using 1 extruder.
+//#define Z_DUAL_STEPPER_DRIVERS
+
+#ifdef Z_DUAL_STEPPER_DRIVERS
+  #undef EXTRUDERS
+  #define EXTRUDERS 1
+#endif
 
 //homing hits the endstop, then retracts by this distance, before it tries to slowly bump again:
 #define X_HOME_RETRACT_MM 5 
@@ -87,6 +144,12 @@
 #define AXIS_RELATIVE_MODES {false, false, false, false}
 
 #define MAX_STEP_FREQUENCY 40000 // Max step frequency for Ultimaker (5000 pps / half step)
+
+//By default pololu step drivers require an active high signal. However, some high power drivers require an active low signal as step.
+#define INVERT_X_STEP_PIN false
+#define INVERT_Y_STEP_PIN false
+#define INVERT_Z_STEP_PIN false
+#define INVERT_E_STEP_PIN false
 
 //default stepper release if idle
 #define DEFAULT_STEPPER_DEACTIVE_TIME 60

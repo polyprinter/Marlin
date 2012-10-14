@@ -1,3 +1,5 @@
+/* -*- c++ -*- */
+
 /*
     Reprap firmware based on Sprinter and grbl.
  Copyright (C) 2011 Camiel Gubbels / Erik van der Zalm
@@ -38,7 +40,12 @@
 #include "language.h"
 #include "pins_arduino.h"
 
-#define VERSION_STRING  "1.0.0 RC2"
+#ifdef MCP23017_LCD
+#include <Wire.h>
+#include <Adafruit_MCP23017.h>
+#include <Adafruit_RGBLCDShield.h>
+#endif
+#define VERSION_STRING  "1.0.0"
 
 // look here for descriptions of gcodes: http://linuxcnc.org/handbook/gcode/g-code.html
 // http://objects.reprap.org/wiki/Mendel_User_Manual:_RepRapGCodes
@@ -113,6 +120,7 @@
 // M301 - Set PID parameters P I and D
 // M302 - Allow cold extrudes
 // M303 - PID relay autotune S<temperature> sets the target temperature. (default target temperature = 150C)
+// M304 - Set bed PID parameters P I and D
 // M400 - Finish all moves
 // M500 - stores paramters in EEPROM
 // M501 - reads parameters from EEPROM (if you need reset them after you changed them temporarily).  
@@ -141,6 +149,8 @@ volatile bool feedmultiplychanged=false;
 volatile int extrudemultiply=100; //100->1 200->2
 float current_position[NUM_AXIS] = { 0.0, 0.0, 0.0, 0.0 };
 float add_homeing[3]={0,0,0};
+float min_pos[3] = { X_MIN_POS, Y_MIN_POS, Z_MIN_POS };
+float max_pos[3] = { X_MAX_POS, Y_MAX_POS, Z_MAX_POS };
 uint8_t active_extruder = 0;
 unsigned char FanSpeed=0;
 
@@ -198,6 +208,14 @@ bool Stopped=false;
 //===========================================================================
 
 void get_arc_coordinates();
+bool setTargetedHotend(int code);
+
+void serial_echopair_P(const char *s_P, float v)
+    { serialprintPGM(s_P); SERIAL_ECHO(v); }
+void serial_echopair_P(const char *s_P, double v)
+    { serialprintPGM(s_P); SERIAL_ECHO(v); }
+void serial_echopair_P(const char *s_P, unsigned long v)
+    { serialprintPGM(s_P); SERIAL_ECHO(v); }
 
 extern "C"{
   extern unsigned int __bss_end;
@@ -234,6 +252,14 @@ void enquecommand(const char *cmd)
   }
 }
 
+void setup_killpin()
+{
+  #if( KILL_PIN>-1 )
+    pinMode(KILL_PIN,INPUT);
+    WRITE(KILL_PIN,HIGH);
+  #endif
+}
+    
 void setup_photpin()
 {
   #ifdef PHOTOGRAPH_PIN
@@ -266,6 +292,7 @@ void suicide()
 
 void setup()
 { 
+  setup_killpin(); 
   setup_powerhold();
   MYSERIAL.begin(BAUDRATE);
   SERIAL_PROTOCOLLNPGM("start");
@@ -354,7 +381,7 @@ void loop()
   }
   //check heater every n milliseconds
   manage_heater();
-  manage_inactivity(1);
+  manage_inactivity();
   checkHitEndstops();
   LCD_STATUS;
 }
@@ -541,32 +568,65 @@ bool code_seen(char code)
   return (strchr_pointer != NULL);  //Return True if a character was found
 }
 
-#define HOMEAXIS(LETTER) \
-  if ((LETTER##_MIN_PIN > -1 && LETTER##_HOME_DIR==-1) || (LETTER##_MAX_PIN > -1 && LETTER##_HOME_DIR==1))\
-    { \
-    current_position[LETTER##_AXIS] = 0; \
-    plan_set_position(current_position[X_AXIS], current_position[Y_AXIS], current_position[Z_AXIS], current_position[E_AXIS]); \
-    destination[LETTER##_AXIS] = 1.5 * LETTER##_MAX_LENGTH * LETTER##_HOME_DIR; \
-    feedrate = homing_feedrate[LETTER##_AXIS]; \
-    plan_buffer_line(destination[X_AXIS], destination[Y_AXIS], destination[Z_AXIS], destination[E_AXIS], feedrate/60, active_extruder); \
-    st_synchronize();\
-    \
-    current_position[LETTER##_AXIS] = 0;\
-    plan_set_position(current_position[X_AXIS], current_position[Y_AXIS], current_position[Z_AXIS], current_position[E_AXIS]);\
-    destination[LETTER##_AXIS] = -LETTER##_HOME_RETRACT_MM * LETTER##_HOME_DIR;\
-    plan_buffer_line(destination[X_AXIS], destination[Y_AXIS], destination[Z_AXIS], destination[E_AXIS], feedrate/60, active_extruder); \
-    st_synchronize();\
-    \
-    destination[LETTER##_AXIS] = 2*LETTER##_HOME_RETRACT_MM * LETTER##_HOME_DIR;\
-    feedrate = homing_feedrate[LETTER##_AXIS]/2 ;  \
-    plan_buffer_line(destination[X_AXIS], destination[Y_AXIS], destination[Z_AXIS], destination[E_AXIS], feedrate/60, active_extruder); \
-    st_synchronize();\
-    \
-    current_position[LETTER##_AXIS] = (LETTER##_HOME_DIR == -1) ? LETTER##_HOME_POS : LETTER##_MAX_LENGTH;\
-    destination[LETTER##_AXIS] = current_position[LETTER##_AXIS];\
-    feedrate = 0.0;\
-    endstops_hit_on_purpose();\
+#define DEFINE_PGM_READ_ANY(type, reader)		\
+    static inline type pgm_read_any(const type *p)	\
+	{ return pgm_read_##reader##_near(p); }
+
+DEFINE_PGM_READ_ANY(float,       float);
+DEFINE_PGM_READ_ANY(signed char, byte);
+
+#define XYZ_CONSTS_FROM_CONFIG(type, array, CONFIG)	\
+static const PROGMEM type array##_P[3] =		\
+    { X_##CONFIG, Y_##CONFIG, Z_##CONFIG };		\
+static inline type array(int axis)			\
+    { return pgm_read_any(&array##_P[axis]); }
+
+XYZ_CONSTS_FROM_CONFIG(float, base_min_pos,    MIN_POS);
+XYZ_CONSTS_FROM_CONFIG(float, base_max_pos,    MAX_POS);
+XYZ_CONSTS_FROM_CONFIG(float, base_home_pos,   HOME_POS);
+XYZ_CONSTS_FROM_CONFIG(float, max_length,      MAX_LENGTH);
+XYZ_CONSTS_FROM_CONFIG(float, home_retract_mm, HOME_RETRACT_MM);
+XYZ_CONSTS_FROM_CONFIG(signed char, home_dir,  HOME_DIR);
+
+static void axis_is_at_home(int axis) {
+  current_position[axis] = base_home_pos(axis) + add_homeing[axis];
+  min_pos[axis] =          base_min_pos(axis) + add_homeing[axis];
+  max_pos[axis] =          base_max_pos(axis) + add_homeing[axis];
+}
+
+static void homeaxis(int axis) {
+#define HOMEAXIS_DO(LETTER) \
+  ((LETTER##_MIN_PIN > -1 && LETTER##_HOME_DIR==-1) || (LETTER##_MAX_PIN > -1 && LETTER##_HOME_DIR==1))
+
+  if (axis==X_AXIS ? HOMEAXIS_DO(X) :
+      axis==Y_AXIS ? HOMEAXIS_DO(Y) :
+      axis==Z_AXIS ? HOMEAXIS_DO(Z) :
+      0) {
+    current_position[axis] = 0;
+    plan_set_position(current_position[X_AXIS], current_position[Y_AXIS], current_position[Z_AXIS], current_position[E_AXIS]);
+    destination[axis] = 1.5 * max_length(axis) * home_dir(axis);
+    feedrate = homing_feedrate[axis];
+    plan_buffer_line(destination[X_AXIS], destination[Y_AXIS], destination[Z_AXIS], destination[E_AXIS], feedrate/60, active_extruder);
+    st_synchronize();
+   
+    current_position[axis] = 0;
+    plan_set_position(current_position[X_AXIS], current_position[Y_AXIS], current_position[Z_AXIS], current_position[E_AXIS]);
+    destination[axis] = -home_retract_mm(axis) * home_dir(axis);
+    plan_buffer_line(destination[X_AXIS], destination[Y_AXIS], destination[Z_AXIS], destination[E_AXIS], feedrate/60, active_extruder);
+    st_synchronize();
+   
+    destination[axis] = 2*home_retract_mm(axis) * home_dir(axis);
+    feedrate = homing_feedrate[axis]/2 ; 
+    plan_buffer_line(destination[X_AXIS], destination[Y_AXIS], destination[Z_AXIS], destination[E_AXIS], feedrate/60, active_extruder);
+    st_synchronize();
+   
+    axis_is_at_home(axis);					
+    destination[axis] = current_position[axis];
+    feedrate = 0.0;
+    endstops_hit_on_purpose();
   }
+  }
+#define HOMEAXIS(LETTER) homeaxis(LETTER##_AXIS)
 
 void process_commands()
 {
@@ -609,7 +669,7 @@ void process_commands()
       previous_millis_cmd = millis();
       while(millis()  < codenum ){
         manage_heater();
-        manage_inactivity(1);
+        manage_inactivity();
 		LCD_STATUS;
       }
       break;
@@ -656,6 +716,13 @@ void process_commands()
       }
       feedrate = 0.0;
       home_all_axis = !((code_seen(axis_codes[0])) || (code_seen(axis_codes[1])) || (code_seen(axis_codes[2])));
+      
+      #if Z_HOME_DIR > 0                      // If homing away from BED do Z first
+      if((home_all_axis) || (code_seen(axis_codes[Z_AXIS]))) {
+        HOMEAXIS(Z);
+      }
+      #endif
+      
       #ifdef QUICK_HOME
       if((home_all_axis)||( code_seen(axis_codes[X_AXIS]) && code_seen(axis_codes[Y_AXIS])) )  //first diagonal move
       {
@@ -669,8 +736,8 @@ void process_commands()
         plan_buffer_line(destination[X_AXIS], destination[Y_AXIS], destination[Z_AXIS], destination[E_AXIS], feedrate/60, active_extruder);
         st_synchronize();
     
-        current_position[X_AXIS] = (X_HOME_DIR == -1) ? X_HOME_POS : X_MAX_LENGTH;
-        current_position[Y_AXIS] = (Y_HOME_DIR == -1) ? Y_HOME_POS : Y_MAX_LENGTH;
+        axis_is_at_home(X_AXIS);
+        axis_is_at_home(Y_AXIS);
         plan_set_position(current_position[X_AXIS], current_position[Y_AXIS], current_position[Z_AXIS], current_position[E_AXIS]);
         destination[X_AXIS] = current_position[X_AXIS];
         destination[Y_AXIS] = current_position[Y_AXIS];
@@ -690,9 +757,11 @@ void process_commands()
        HOMEAXIS(Y);
       }
       
+      #if Z_HOME_DIR < 0                      // If homing towards BED do Z last
       if((home_all_axis) || (code_seen(axis_codes[Z_AXIS]))) {
         HOMEAXIS(Z);
       }
+      #endif
       
       if(code_seen(axis_codes[X_AXIS])) 
       {
@@ -763,18 +832,17 @@ void process_commands()
       
       st_synchronize();
       previous_millis_cmd = millis();
-	  if (codenum > 0)
-	  {
+      if (codenum > 0){
         codenum += millis();  // keep track of when we started waiting
         while(millis()  < codenum && !CLICKED){
           manage_heater();
-          manage_inactivity(1);
+          manage_inactivity();
 		  LCD_STATUS;
 		}
       }else{
         while(!CLICKED) {
           manage_heater();
-          manage_inactivity(1);
+          manage_inactivity();
 		  LCD_STATUS;
 		}
 	  }
@@ -896,16 +964,9 @@ void process_commands()
       }
      break;
     case 104: // M104
-      tmp_extruder = active_extruder;
-      if(code_seen('T')) {
-        tmp_extruder = code_value();
-        if(tmp_extruder >= EXTRUDERS) {
-          SERIAL_ECHO_START;
-          SERIAL_ECHO(MSG_M104_INVALID_EXTRUDER);
-          SERIAL_ECHOLN(tmp_extruder);
+      if(setTargetedHotend(104)){
           break;
         }
-      }
       if (code_seen('S')) setTargetHotend(code_value(), tmp_extruder);
       setWatch();
       break;
@@ -913,16 +974,9 @@ void process_commands()
       if (code_seen('S')) setTargetBed(code_value());
       break;
     case 105 : // M105
-      tmp_extruder = active_extruder;
-      if(code_seen('T')) {
-        tmp_extruder = code_value();
-        if(tmp_extruder >= EXTRUDERS) {
-          SERIAL_ECHO_START;
-          SERIAL_ECHO(MSG_M105_INVALID_EXTRUDER);
-          SERIAL_ECHOLN(tmp_extruder);
+      if(setTargetedHotend(105)){
           break;
         }
-      }
       #if (TEMP_0_PIN > -1)
         SERIAL_PROTOCOLPGM("ok T:");
         SERIAL_PROTOCOL_F(degHotend(tmp_extruder),1); 
@@ -938,25 +992,21 @@ void process_commands()
         SERIAL_ERROR_START;
         SERIAL_ERRORLNPGM(MSG_ERR_NO_THERMISTORS);
       #endif
-      #ifdef PIDTEMP
+
         SERIAL_PROTOCOLPGM(" @:");
         SERIAL_PROTOCOL(getHeaterPower(tmp_extruder));  
-      #endif
+
+        SERIAL_PROTOCOLPGM(" B@:");
+        SERIAL_PROTOCOL(getHeaterPower(-1));  
+
         SERIAL_PROTOCOLLN("");
       return;
       break;
     case 109: 
     {// M109 - Wait for extruder heater to reach target.
-      tmp_extruder = active_extruder;
-      if(code_seen('T')) {
-        tmp_extruder = code_value();
-        if(tmp_extruder >= EXTRUDERS) {
-          SERIAL_ECHO_START;
-          SERIAL_ECHO(MSG_M109_INVALID_EXTRUDER);
-          SERIAL_ECHOLN(tmp_extruder);
+      if(setTargetedHotend(109)){
           break;
         }
-      }
       LCD_MESSAGEPGM(MSG_HEATING);   
       #ifdef AUTOTEMP
         autotemp_enabled=false;
@@ -1011,7 +1061,7 @@ void process_commands()
             codenum = millis();
           }
           manage_heater();
-          manage_inactivity(1);
+          manage_inactivity();
           LCD_STATUS;
         #ifdef TEMP_RESIDENCY_TIME
             /* start/restart the TEMP_RESIDENCY_TIME timer whenever we reach target temp for the first time
@@ -1049,7 +1099,7 @@ void process_commands()
             codenum = millis(); 
           }
           manage_heater();
-          manage_inactivity(1);
+          manage_inactivity();
           LCD_STATUS;
         }
         LCD_MESSAGEPGM(MSG_BED_DONE);
@@ -1084,7 +1134,8 @@ void process_commands()
         st_synchronize();
         suicide();
       #elif (PS_ON_PIN > -1)
-        SET_INPUT(PS_ON_PIN); //Floating
+        SET_OUTPUT(PS_ON_PIN); 
+        WRITE(PS_ON_PIN, HIGH);
       #endif
 		break;
         
@@ -1183,31 +1234,31 @@ void process_commands()
       enable_endstops(true) ;
       break;
     case 119: // M119
+    SERIAL_PROTOCOLLN(MSG_M119_REPORT);
       #if (X_MIN_PIN > -1)
         SERIAL_PROTOCOLPGM(MSG_X_MIN);
-        SERIAL_PROTOCOL(((READ(X_MIN_PIN)^X_ENDSTOPS_INVERTING)?"H ":"L "));
+        SERIAL_PROTOCOLLN(((READ(X_MIN_PIN)^X_ENDSTOPS_INVERTING)?MSG_ENDSTOP_HIT:MSG_ENDSTOP_OPEN));
       #endif
       #if (X_MAX_PIN > -1)
         SERIAL_PROTOCOLPGM(MSG_X_MAX);
-        SERIAL_PROTOCOL(((READ(X_MAX_PIN)^X_ENDSTOPS_INVERTING)?"H ":"L "));
+        SERIAL_PROTOCOLLN(((READ(X_MAX_PIN)^X_ENDSTOPS_INVERTING)?MSG_ENDSTOP_HIT:MSG_ENDSTOP_OPEN));
       #endif
       #if (Y_MIN_PIN > -1)
         SERIAL_PROTOCOLPGM(MSG_Y_MIN);
-        SERIAL_PROTOCOL(((READ(Y_MIN_PIN)^Y_ENDSTOPS_INVERTING)?"H ":"L "));
+        SERIAL_PROTOCOLLN(((READ(Y_MIN_PIN)^Y_ENDSTOPS_INVERTING)?MSG_ENDSTOP_HIT:MSG_ENDSTOP_OPEN));
       #endif
       #if (Y_MAX_PIN > -1)
         SERIAL_PROTOCOLPGM(MSG_Y_MAX);
-        SERIAL_PROTOCOL(((READ(Y_MAX_PIN)^Y_ENDSTOPS_INVERTING)?"H ":"L "));
+        SERIAL_PROTOCOLLN(((READ(Y_MAX_PIN)^Y_ENDSTOPS_INVERTING)?MSG_ENDSTOP_HIT:MSG_ENDSTOP_OPEN));
       #endif
       #if (Z_MIN_PIN > -1)
         SERIAL_PROTOCOLPGM(MSG_Z_MIN);
-        SERIAL_PROTOCOL(((READ(Z_MIN_PIN)^Z_ENDSTOPS_INVERTING)?"H ":"L "));
+        SERIAL_PROTOCOLLN(((READ(Z_MIN_PIN)^Z_ENDSTOPS_INVERTING)?MSG_ENDSTOP_HIT:MSG_ENDSTOP_OPEN));
       #endif
       #if (Z_MAX_PIN > -1)
         SERIAL_PROTOCOLPGM(MSG_Z_MAX);
-        SERIAL_PROTOCOL(((READ(Z_MAX_PIN)^Z_ENDSTOPS_INVERTING)?"H ":"L "));
+        SERIAL_PROTOCOLLN(((READ(Z_MAX_PIN)^Z_ENDSTOPS_INVERTING)?MSG_ENDSTOP_HIT:MSG_ENDSTOP_OPEN));
       #endif
-      SERIAL_PROTOCOLLN("");
       break;
       //TODO: update for all axis, use for loop
     case 201: // M201
@@ -1344,6 +1395,24 @@ void process_commands()
       }
       break;
     #endif //PIDTEMP
+    #ifdef PIDTEMPBED
+    case 304: // M304
+      {
+        if(code_seen('P')) bedKp = code_value();
+        if(code_seen('I')) bedKi = code_value()*PID_dT;
+        if(code_seen('D')) bedKd = code_value()/PID_dT;
+        updatePID();
+        SERIAL_PROTOCOL(MSG_OK);
+		SERIAL_PROTOCOL(" p:");
+        SERIAL_PROTOCOL(bedKp);
+        SERIAL_PROTOCOL(" i:");
+        SERIAL_PROTOCOL(bedKi/PID_dT);
+        SERIAL_PROTOCOL(" d:");
+        SERIAL_PROTOCOL(bedKd*PID_dT);
+        SERIAL_PROTOCOLLN("");
+      }
+      break;
+    #endif //PIDTEMP
     case 240: // M240  Triggers a camera by emulating a Canon RC-1 : http://www.doc-diy.net/photo/rc-1_hacked/
      {
       #ifdef PHOTOGRAPH_PIN
@@ -1376,8 +1445,14 @@ void process_commands()
     case 303: // M303 PID autotune
     {
       float temp = 150.0;
+      int e=0;
+      int c=5;
+      if (code_seen('E')) e=code_value();
+			if (e<0)
+				temp=70;
       if (code_seen('S')) temp=code_value();
-      PID_autotune(temp);
+      if (code_seen('C')) c=code_value();
+      PID_autotune(temp, e, c);
     }
     break;
     case 400: // M400 finish all moves
@@ -1515,7 +1590,15 @@ void get_coordinates()
 
 void get_arc_coordinates()
 {
+#ifdef SF_ARC_FIX
+   bool relative_mode_backup = relative_mode;
+   relative_mode = true;
+#endif
    get_coordinates();
+#ifdef SF_ARC_FIX
+   relative_mode=relative_mode_backup;
+#endif
+
    if(code_seen('I')) {
      offset[0] = code_value();
    } 
@@ -1530,21 +1613,33 @@ void get_arc_coordinates()
    }
 }
 
-void prepare_move()
+void clamp_to_software_endstops(float target[3])
 {
   if (min_software_endstops) {
-    if (destination[X_AXIS] < X_HOME_POS) destination[X_AXIS] = X_HOME_POS;
-    if (destination[Y_AXIS] < Y_HOME_POS) destination[Y_AXIS] = Y_HOME_POS;
-    if (destination[Z_AXIS] < Z_HOME_POS) destination[Z_AXIS] = Z_HOME_POS;
+    if (target[X_AXIS] < min_pos[X_AXIS]) target[X_AXIS] = min_pos[X_AXIS];
+    if (target[Y_AXIS] < min_pos[Y_AXIS]) target[Y_AXIS] = min_pos[Y_AXIS];
+    if (target[Z_AXIS] < min_pos[Z_AXIS]) target[Z_AXIS] = min_pos[Z_AXIS];
   }
 
   if (max_software_endstops) {
-    if (destination[X_AXIS] > X_MAX_LENGTH) destination[X_AXIS] = X_MAX_LENGTH;
-    if (destination[Y_AXIS] > Y_MAX_LENGTH) destination[Y_AXIS] = Y_MAX_LENGTH;
-    if (destination[Z_AXIS] > Z_MAX_LENGTH) destination[Z_AXIS] = Z_MAX_LENGTH;
+    if (target[X_AXIS] > max_pos[X_AXIS]) target[X_AXIS] = max_pos[X_AXIS];
+    if (target[Y_AXIS] > max_pos[Y_AXIS]) target[Y_AXIS] = max_pos[Y_AXIS];
+    if (target[Z_AXIS] > max_pos[Z_AXIS]) target[Z_AXIS] = max_pos[Z_AXIS];
   }
+}
+
+void prepare_move()
+{
+  clamp_to_software_endstops(destination);
+
   previous_millis_cmd = millis();  
+  // Do not use feedmultiply for E or Z only moves
+  if( (current_position[X_AXIS] == destination [X_AXIS]) && (current_position[Y_AXIS] == destination [Y_AXIS])) {
+      plan_buffer_line(destination[X_AXIS], destination[Y_AXIS], destination[Z_AXIS], destination[E_AXIS], feedrate/60, active_extruder);
+  }
+  else {
   plan_buffer_line(destination[X_AXIS], destination[Y_AXIS], destination[Z_AXIS], destination[E_AXIS], feedrate*feedmultiply/60/100.0, active_extruder);
+  }
   for(int8_t i=0; i < NUM_AXIS; i++) {
     current_position[i] = destination[i];
   }
@@ -1599,7 +1694,7 @@ void controllerFan()
 }
 #endif
 
-void manage_inactivity(byte debug) 
+void manage_inactivity() 
 { 
   if( (millis() - previous_millis_cmd) >  max_inactive_time ) 
     if(max_inactive_time) 
@@ -1617,6 +1712,10 @@ void manage_inactivity(byte debug)
       }
     }
   }
+  #if( KILL_PIN>-1 )
+    if( 0 == READ(KILL_PIN) )
+      kill();
+  #endif
   #ifdef CONTROLLERFAN_PIN
     controllerFan(); //Check if fan should be turned on to cool stepper drivers down
   #endif
@@ -1747,6 +1846,28 @@ void setPwmFrequency(uint8_t pin, int val)
 
   }
 }
-#endif
+#endif //FAST_PWM_FAN
 
-
+bool setTargetedHotend(int code){
+  tmp_extruder = active_extruder;
+  if(code_seen('T')) {
+    tmp_extruder = code_value();
+    if(tmp_extruder >= EXTRUDERS) {
+      SERIAL_ECHO_START;
+      switch(code){
+        case 104:
+          SERIAL_ECHO(MSG_M104_INVALID_EXTRUDER);
+          break;
+        case 105:
+          SERIAL_ECHO(MSG_M105_INVALID_EXTRUDER);
+          break;
+        case 109:
+          SERIAL_ECHO(MSG_M109_INVALID_EXTRUDER);
+          break;
+      }
+      SERIAL_ECHOLN(tmp_extruder);
+      return true;
+    }
+  }
+  return false;
+}
