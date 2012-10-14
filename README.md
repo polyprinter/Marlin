@@ -1,4 +1,4 @@
-This version supports Printrboard and Panucatt VersaPanel (with RAMPS)
+This version supports Printrboard and Panucatt VersaPanel (with Prinrboard & RAMPS )
 last upstream merge 10/12 RC3-81-gbc27d80
 
 WARNING: 
