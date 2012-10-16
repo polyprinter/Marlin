@@ -1,6 +1,10 @@
 This version supports Printrboard and Panucatt VersaPanel (with Prinrboard & RAMPS )
 last upstream merge 10/12 RC3-81-gbc27d80
 
+To enable VersaPanel support:
+1) uncomment #define VERSAPANEL in Configuration.h
+2) download and install LiquidTWI2 http://blog.lincomatic.com/?tag=liquidtwi2
+
 WARNING: 
 --------
 THIS IS RELEASE CANDIDATE 2 FOR MARLIN 1.0.0

@@ -28,7 +28,10 @@
  */
 
 #include "Marlin.h"
-
+#ifdef MCP23017_LCD
+#include <Wire.h>
+#include <LiquidTWI2.h>
+#endif
 #include "ultralcd.h"
 #include "planner.h"
 #include "stepper.h"
@@ -40,11 +43,7 @@
 #include "language.h"
 #include "pins_arduino.h"
 
-#ifdef MCP23017_LCD
-#include <Wire.h>
-#include <Adafruit_MCP23017.h>
-#include <Adafruit_RGBLCDShield.h>
-#endif
+
 #define VERSION_STRING  "1.0.0"
 
 // look here for descriptions of gcodes: http://linuxcnc.org/handbook/gcode/g-code.html

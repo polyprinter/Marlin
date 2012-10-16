@@ -40,7 +40,7 @@ static char messagetext[LCD_WIDTH]="";
 //return for string conversion routines
 static char conv[8];
 #ifdef MCP23017_LCD
-Adafruit_RGBLCDShield lcd;
+LiquidTWI2 lcd(0);
 #else
 LiquidCrystal lcd(LCD_PINS_RS, LCD_PINS_ENABLE, LCD_PINS_D4, LCD_PINS_D5,LCD_PINS_D6,LCD_PINS_D7);  //RS,Enable,D4,D5,D6,D7 
 #endif
@@ -168,6 +168,9 @@ void lcd_init()
     B00000,
     B00000
   }; //thanks joris
+#ifdef MCP23017_LCD
+  lcd.setMCPType(LTI_TYPE_MCP23017);
+#endif
   lcd.begin(LCD_WIDTH, LCD_HEIGHT);
   lcd.createChar(1,Degree);
   lcd.createChar(2,Thermometer);

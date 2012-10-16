@@ -15,7 +15,7 @@
   #define LCD_UPDATE_INTERVAL 100
   #define STATUSTIMEOUT 15000
 #ifdef MCP23017_LCD
-  extern Adafruit_RGBLCDShield lcd;
+  extern LiquidTWI2 lcd;
 #else
   extern LiquidCrystal lcd;
 #endif

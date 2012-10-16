@@ -37,8 +37,7 @@
 
 #ifdef MCP23017_LCD
 #include <Wire.h>
-#include <Adafruit_MCP23017.h>
-#include <Adafruit_RGBLCDShield.h>
+#include <LiquidTWI2.h>
 #endif
 #include "MarlinSerial.h"
 
