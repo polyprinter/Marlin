@@ -8,12 +8,14 @@
 //User specified version info of THIS file to display in [Pronterface, etc] terminal window during startup.
 //Implementation of an idea by Prof Braino to inform user that any changes made
 //to THIS file by the user have been successfully uploaded into firmware.
-#define STRING_VERSION_CONFIG_H "2012-05-02" //Personal revision number for changes to THIS file.
-#define STRING_CONFIG_H_AUTHOR "erik" //Who made the changes.
+#define STRING_VERSION_CONFIG_H "2012-10-25" //Personal revision number for changes to THIS file.
+// 20121025 Changed max accel to 2500
+
+#define STRING_CONFIG_H_AUTHOR "ed" //Who made the changes.
 
 // This determines the communication speed of the printer
-#define BAUDRATE 250000
-//#define BAUDRATE 115200
+//#define BAUDRATE 250000
+#define BAUDRATE 115200
 
 //// The following define selects which electronics board you have. Please choose the one that matches your setup
 // Gen7 custom (Alfons3 Version) = 10 "https://github.com/Alfons3/Generation_7_Electronics"
@@ -60,15 +62,15 @@
 // 52 is 200k thermistor - ATC Semitec 204GT-2 (1k pullup)
 // 55 is 100k thermistor - ATC Semitec 104GT-2 (Used in ParCan) (1k pullup)
 
-#define TEMP_SENSOR_0 6
+#define TEMP_SENSOR_0 1  
 #define TEMP_SENSOR_1 0
 #define TEMP_SENSOR_2 0
-#define TEMP_SENSOR_BED 6
+#define TEMP_SENSOR_BED 1
 
 // Actual temperature must be close to target for this long before M109 returns success
 #define TEMP_RESIDENCY_TIME 10	// (seconds)
 #define TEMP_HYSTERESIS 3       // (degC) range of +/- temperatures considered "close" to the target one
-#define TEMP_WINDOW     1       // (degC) Window around target to start the recidency timer x degC early.
+#define TEMP_WINDOW     3       // (degC) Window around target to start the residency timer x degC early.
 
 // The minimal temperature defines the temperature below which the heater will not be enabled It is used
 // to check that the wiring to the thermistor is not broken. 
@@ -81,9 +83,9 @@
 // When temperature exceeds max temp, your heater will be switched off.
 // This feature exists to protect your hotend from overheating accidentally, but *NOT* from thermistor short/failure!
 // You should use MINTEMP for thermistor short/failure protection.
-#define HEATER_0_MAXTEMP 250
-#define HEATER_1_MAXTEMP 250
-#define HEATER_2_MAXTEMP 250
+#define HEATER_0_MAXTEMP 275
+#define HEATER_1_MAXTEMP 275
+#define HEATER_2_MAXTEMP 275
 #define BED_MAXTEMP 150
 
 // If your bed has low resistance e.g. .6 ohm and throws the fuse you can duty cycle it to reduce the
@@ -196,9 +198,9 @@
 #endif
 
 // The pullups are needed if you directly connect a mechanical endswitch between the signal and ground pins.
-const bool X_ENDSTOPS_INVERTING = true; // set to true to invert the logic of the endstops. 
-const bool Y_ENDSTOPS_INVERTING = true; // set to true to invert the logic of the endstops. 
-const bool Z_ENDSTOPS_INVERTING = true; // set to true to invert the logic of the endstops. 
+const bool X_ENDSTOPS_INVERTING = false; // set to true to invert the logic of the endstops. 
+const bool Y_ENDSTOPS_INVERTING = false; // set to true to invert the logic of the endstops. 
+const bool Z_ENDSTOPS_INVERTING = false; // set to true to invert the logic of the endstops. 
 #define DISABLE_MAX_ENDSTOPS
 
 // For Inverting Stepper Enable Pins (Active Low) use 0, Non Inverting (Active High) use 1
@@ -210,13 +212,13 @@ const bool Z_ENDSTOPS_INVERTING = true; // set to true to invert the logic of th
 // Disables axis when it's not being used.
 #define DISABLE_X false
 #define DISABLE_Y false
-#define DISABLE_Z false
+#define DISABLE_Z true
 #define DISABLE_E false // For all extruders
 
-#define INVERT_X_DIR false    // for Mendel set to false, for Orca set to true
-#define INVERT_Y_DIR true  // for Mendel set to true, for Orca set to false
+#define INVERT_X_DIR true    // for Mendel set to false, for Orca set to true
+#define INVERT_Y_DIR false    // for Mendel set to true, for Orca set to false
 #define INVERT_Z_DIR false     // for Mendel set to false, for Orca set to true
-#define INVERT_E0_DIR false  // for direct drive extruder v9 set to true, for geared extruder set to false
+#define INVERT_E0_DIR true   // for direct drive extruder v9 set to true, for geared extruder set to false
 #define INVERT_E1_DIR false    // for direct drive extruder v9 set to true, for geared extruder set to false
 #define INVERT_E2_DIR false   // for direct drive extruder v9 set to true, for geared extruder set to false
 
@@ -229,11 +231,11 @@ const bool Z_ENDSTOPS_INVERTING = true; // set to true to invert the logic of th
 #define min_software_endstops true //If true, axis won't move to coordinates less than HOME_POS.
 #define max_software_endstops true  //If true, axis won't move to coordinates greater than the defined lengths below.
 // Travel limits after homing
-#define X_MAX_POS 190 //205
+#define X_MAX_POS 236
 #define X_MIN_POS 0
-#define Y_MAX_POS 190 //205
+#define Y_MAX_POS 228
 #define Y_MIN_POS 0
-#define Z_MAX_POS 200
+#define Z_MAX_POS 225
 #define Z_MIN_POS 0
 
 #define X_MAX_LENGTH (X_MAX_POS - X_MIN_POS)
@@ -254,8 +256,32 @@ const bool Z_ENDSTOPS_INVERTING = true; // set to true to invert the logic of th
 #define HOMING_FEEDRATE {50*60, 50*60, 4*60, 0}  // set the homing speeds (mm/min)
 
 // default settings 
+//===========================================================================
+//===========================CALIBRATION PARAMETERS==========================
+//===========================================================================
+// Formula for X and Y steps per mm = [(Number of Motor Steps per Revolution)*(1/(microstepping ratio)]/(BeltPitch*ToothCount)
+// Formula for Z steps per mm = (Motor Steps per revolution)*(1/(microstepping ratio)/(Vertical Movement per revolution)    where Vert. Movement per revolution = 1.25mm for directly driven M8 rods on Prusa
+// Formula for Extruder steps per mm = [(PackingDensity)*(Number of Motor Steps per Revolution)*(Gear Ratio of Extruder)*(1/(microstepping ratio)]/(pi*(Diamter of Hobbed Bolt or Pinch Wheel))
+//      -Equation based on: http://www.brokentoaster.com/blog/?p=358 and http://hydraraptor.blogspot.com/2011/03/spot-on-flow-rate.html
+//      -The term ((NozzleDiameter^2)/(ExtrudedFilamentDiamter^2) from the above articles is consolidated to the term "PackingDensity"
+// INSTRUCTIONS: ENTER PARAMETERS BELOW FOR YOUR EQUIPMENT.
+#define MICROSTEPPING_RATIO 0.0625  // Enter microstepping ratio of electronics. Printrboard and Pololu = 1/16, Gen6 = 1/8, etc.
+#define XY_MTR_STPS 400      		// Enter number of steps per one revolution of the X and Y motors. See motor datasheet, 1.8degree = 200 steps, 0.9degree = 400 steps
+#define Z_MTR_STPS 200      		// Enter number of steps per one revolution of the Z motor(s).
+#define EXTRUDER_MTR_STPS 200      	// Enter number of steps per one revolution of the extruder motor.
 
-#define DEFAULT_AXIS_STEPS_PER_UNIT   {75.4572,78.964,2254.9403,490}                    // default steps per unit for ultimaker 
+#define PACKING_DENSITY 1.0        	// Leave at 1.0 and adjust in Skeinforge 40+. Alternatively, leave at 1.0 in Skeinforge and calculate manually: Packing_Density = (NozzleDiameter^2)/(Measured_Extruded_Filament_Diamter^2)
+#define BOLT_DIAMETER 10.50         	// Enter measured diameter of hobbed bolt or pinch wheel
+#define EXTRUDER_GEAR_RATIO 1/1  	// Enter gear ratio of extruder. Wade's Extruder: 39/11, Accessible Wade's by Greg Frost: 43/10, Adrian's Extruder: 59/11, etc.
+
+#define BELT_PITCH 2.0				// Enter pitch of X and Y belts in millimeters (space from tooth to tooth). XL belts = 5.08mm
+#define GEAR_TEETH 22				// Enter number of teeth on X and Y gears
+#define Z_ROD_PITCH	1.0			// Enter pitch of Z rods in millimeters. Pitch = 1.25mm for directly driven M8 rods.
+// ************* End MECHANICAL Calibration *************
+
+//#define DEFAULT_AXIS_STEPS_PER_UNIT   {78.7402,78.7402,200*8/3,760*1.1}                    // default steps per unit for ultimaker 
+#define PI 3.14159265359
+#define DEFAULT_AXIS_STEPS_PER_UNIT   {((XY_MTR_STPS/MICROSTEPPING_RATIO)/(BELT_PITCH*GEAR_TEETH)), ((XY_MTR_STPS/MICROSTEPPING_RATIO)/(BELT_PITCH*GEAR_TEETH)), ((Z_MTR_STPS/MICROSTEPPING_RATIO)/Z_ROD_PITCH),((PACKING_DENSITY*EXTRUDER_MTR_STPS*EXTRUDER_GEAR_RATIO*(1/MICROSTEPPING_RATIO))/(PI*BOLT_DIAMETER))}
 #define DEFAULT_MAX_FEEDRATE          {500, 500, 5, 45}    // (mm/sec)    
 #define DEFAULT_MAX_ACCELERATION      {9000,9000,100,10000}    // X, Y, Z, E maximum start speed for accelerated moves. E default values are good for skeinforge 40+, for older versions raise them a lot.
 
@@ -295,7 +321,7 @@ const bool Z_ENDSTOPS_INVERTING = true; // set to true to invert the logic of th
  #define NEWPANEL
  #define MCP23017_LCD // Adafruit RGB LCD compatibles
 #endif
-
+ 
 
 #ifdef ULTIMAKERCONTROLLER    //automatic expansion
  #define ULTIPANEL
@@ -326,6 +352,10 @@ const bool Z_ENDSTOPS_INVERTING = true; // set to true to invert the logic of th
   #endif
 #endif
 
+// Printrboard Fan outputp in is PC6/OC3A
+// get these errors:
+// TIMER0A and B "was not declared in this scope"
+// in setPwnFrewquency() in Marlin
 // Increase the FAN pwm frequency. Removes the PWM noise but increases heating in the FET/Arduino
 //#define FAST_PWM_FAN
 
