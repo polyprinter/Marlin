@@ -941,7 +941,7 @@
 #define Y_STEP_PIN         30
 #define Y_DIR_PIN          31
 #define Y_ENABLE_PIN       18
-#define Y_MIN_PIN           20
+#define Y_MIN_PIN           37  // Printrboard E-Stop connector
 #define Y_MAX_PIN          -1
 
 #define Z_STEP_PIN         32
@@ -969,7 +969,7 @@
 #define SDSS                26
 #define LED_PIN            -1
 #define PS_ON_PIN          -1
-#define KILL_PIN           -1
+#define KILL_PIN           20    // use old "Y" switch input as E-Stop for when carriage nut gets driven out of contact by accident. Can happen when printing, or when homing Z.
 
 #ifndef SDSUPPORT
 // these pins are defined in the SD library if building with SD support
