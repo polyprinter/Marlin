@@ -218,17 +218,22 @@ void step_wait(){
     for(int8_t i=0; i < 6; i++){
     }
 }
-  
+
+const int16_t MAX_INTERRUPT_RATE_HZ = 10000;
+//const int16_t MAX_INTERRUPT_RATE_HZ = 16000;   // testing showed a 24Khz capability when only X and Y operating. Try this to see if it helps.
+#define TIMER_RATE_HZ 2000000
+
+const int16_t MIN_TIMER_COUNT = TIMER_RATE_HZ / MAX_INTERRUPT_RATE_HZ;
 
 FORCE_INLINE unsigned short calc_timer(unsigned short step_rate) {
   unsigned short timer;
-  if(step_rate > MAX_STEP_FREQUENCY) step_rate = MAX_STEP_FREQUENCY;
+  //if ( step_rate > MAX_STEP_FREQUENCY ) step_rate = MAX_STEP_FREQUENCY;
   
-  if(step_rate > 20000) { // If steprate > 20kHz >> step 4 times
+  if ( step_rate > 2*MAX_INTERRUPT_RATE_HZ ) { // If steprate > 20kHz >> step 4 times
     step_rate = (step_rate >> 2)&0x3fff;
     step_loops = 4;
   }
-  else if(step_rate > 10000) { // If steprate > 10kHz >> step 2 times
+  else if ( step_rate > MAX_INTERRUPT_RATE_HZ ) { // If steprate > 10kHz >> step 2 times
     step_rate = (step_rate >> 1)&0x7fff;
     step_loops = 2;
   }
@@ -236,8 +241,14 @@ FORCE_INLINE unsigned short calc_timer(unsigned short step_rate) {
     step_loops = 1;
   } 
   
-  if(step_rate < (F_CPU/500000)) step_rate = (F_CPU/500000);
-  step_rate -= (F_CPU/500000); // Correct for minimal speed
+  if ( step_rate < (F_CPU/500000) ) {
+    step_rate = (F_CPU/500000);
+  }
+  else {
+    // why? 
+    step_rate -= (F_CPU/500000); // Correct for minimal speed
+  }
+  
   if(step_rate >= (8*256)){ // higher step rate 
     unsigned short table_address = (unsigned short)&speed_lookuptable_fast[(unsigned char)(step_rate>>8)][0];
     unsigned char tmp_step_rate = (step_rate & 0x00ff);
@@ -251,7 +262,16 @@ FORCE_INLINE unsigned short calc_timer(unsigned short step_rate) {
     timer = (unsigned short)pgm_read_word_near(table_address);
     timer -= (((unsigned short)pgm_read_word_near(table_address+2) * (unsigned char)(step_rate & 0x0007))>>3);
   }
-  if(timer < 100) { timer = 100; MYSERIAL.print(MSG_STEPPER_TO_HIGH); MYSERIAL.println(step_rate); }//(20kHz this should never happen)
+
+  if ( timer < (MIN_TIMER_COUNT-1)  ) {
+    //(20kHz this should never happen)
+     MYSERIAL.print( MSG_STEPPER_TO_HIGH ); 
+    MYSERIAL.print( step_rate );  
+    MYSERIAL.print( ' ' );  
+    MYSERIAL.println( timer ); 
+    timer = MIN_TIMER_COUNT; 
+ }  
+
   return timer;
 }
 
