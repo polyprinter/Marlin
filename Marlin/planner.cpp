@@ -182,7 +182,7 @@ void calculate_trapezoid_for_block(block_t *block, float entry_factor, float exi
   int32_t accelerate_steps =
     ceil(estimate_acceleration_distance(block->initial_rate, block->nominal_rate, acceleration));
   int32_t decelerate_steps =
-    floor(estimate_acceleration_distance(block->nominal_rate, block->final_rate, -acceleration));
+    ceil(estimate_acceleration_distance(block->nominal_rate, block->final_rate, -acceleration));
 
   // Calculate the size of Plateau of Nominal Rate.
   int32_t plateau_steps = block->step_event_count-accelerate_steps-decelerate_steps;
