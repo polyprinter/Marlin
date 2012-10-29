@@ -39,7 +39,8 @@ typedef struct {
   unsigned char active_extruder;            // Selects the active extruder
   #ifdef ADVANCE
     long advance_rate;
-    volatile long initial_advance;
+	 long unadvance_rate;
+   volatile long initial_advance;
     volatile long final_advance;
     float advance;
   #endif
