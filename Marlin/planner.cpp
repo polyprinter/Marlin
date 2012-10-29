@@ -75,6 +75,10 @@ float max_e_jerk;
 float mintravelfeedrate;
 unsigned long axis_steps_per_sqr_second[NUM_AXIS];
 
+#ifdef ADVANCE
+float extruder_advance_k = EXTRUDER_ADVANCE_K; // defaulted
+#endif
+
 // The current position of the tool in absolute steps
 long position[4];   //rescaled from extern when axis_steps_per_unit are changed by gcode
 static float previous_speed[4]; // Speed of previous path line segment
@@ -184,36 +188,42 @@ void calculate_trapezoid_for_block(block_t *block, float entry_factor, float exi
   int32_t decelerate_steps =
     floor(estimate_acceleration_distance(block->nominal_rate, block->final_rate, -acceleration));
 
+#ifdef ADVANCE
+  long init_advance = block->advance*entry_factor*entry_factor; 
+  long fin_advance  = block->advance*exit_factor*exit_factor;
+  long nominal_accel_steps = accelerate_steps;
+  long nominal_decel_steps = decelerate_steps;
+#endif // ADVANCE
+
   // Calculate the size of Plateau of Nominal Rate.
   int32_t plateau_steps = block->step_event_count-accelerate_steps-decelerate_steps;
 
   // Is the Plateau of Nominal Rate smaller than nothing? That means no cruising, and we will
   // have to use intersection_distance() to calculate when to abort acceleration and start braking
   // in order to reach the final_rate exactly at the end of this block.
-  if (plateau_steps < 0) {
-    accelerate_steps = ceil(
-    intersection_distance(block->initial_rate, block->final_rate, acceleration, block->step_event_count));
+  if ( plateau_steps < 0 ) {
+    accelerate_steps = ceil( intersection_distance(block->initial_rate, block->final_rate, acceleration, block->step_event_count) );
     accelerate_steps = max(accelerate_steps,0); // Check limits due to numerical round-off
     accelerate_steps = min(accelerate_steps,block->step_event_count);
     plateau_steps = 0;
   }
 
-#ifdef ADVANCE
-  volatile long initial_advance = block->advance*entry_factor*entry_factor; 
-  volatile long final_advance = block->advance*exit_factor*exit_factor;
-#endif // ADVANCE
 
   // block->accelerate_until = accelerate_steps;
   // block->decelerate_after = accelerate_steps+plateau_steps;
   CRITICAL_SECTION_START;  // Fill variables used by the stepper in a critical section
-  if(block->busy == false) { // Don't update variables if block is busy.
+  if ( block->busy == false ) { // Don't update variables if block is busy.
     block->accelerate_until = accelerate_steps;
     block->decelerate_after = accelerate_steps+plateau_steps;
     block->initial_rate = initial_rate;
     block->final_rate = final_rate;
 #ifdef ADVANCE
-    block->initial_advance = initial_advance;
-    block->final_advance = final_advance;
+    block->initial_advance = init_advance;
+    block->final_advance   = fin_advance;
+	 // block.advance here is what it would be if full velocity is reached, so we use the nominal steps for each phase, and only as much of 
+	 // each will be applied as there is time and distance for.
+	 block->advance_rate   = ( block->advance - init_advance ) / (float)nominal_accel_steps;		// spread the advance evenly across the entire acceleration distance
+	 block->unadvance_rate = ( block->advance - fin_advance  ) / (float)nominal_decel_steps;		// spread the advance evenly across the entire acceleration distance
 #endif //ADVANCE
   }
   CRITICAL_SECTION_END;
@@ -792,22 +802,38 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
 
 
 #ifdef ADVANCE
-  // Calculate advance rate
-  if((block->steps_e == 0) || (block->steps_x == 0 && block->steps_y == 0 && block->steps_z == 0)) {
-    block->advance_rate = 0;
+  // TODO: this should be done separately for acceleration and deceleration, and done in the calculate_trapezoid_for_block() function
+  block->advance_rate = 0;
+  block->unadvance_rate = 0;
+
+  // Calculate advance 
+  if ( (block->steps_e == 0) || (block->steps_x == 0 && block->steps_y == 0 && block->steps_z == 0) ) {
     block->advance = 0;
   }
   else {
-    long acc_dist = estimate_acceleration_distance(0, block->nominal_rate, block->acceleration_st);
-    float advance = (STEPS_PER_CUBIC_MM_E * EXTRUDER_ADVANCE_K) * 
-      (current_speed[E_AXIS] * current_speed[E_AXIS] * EXTRUTION_AREA * EXTRUTION_AREA)*256;
-    block->advance = advance;
-    if(acc_dist == 0) {
+	 //float advance = (STEPS_PER_CUBIC_MM_E * EXTRUDER_ADVANCE_K) * (current_speed[E_AXIS] * current_speed[E_AXIS] * EXTRUSION_AREA * EXTRUSION_AREA ) * 256;
+#ifdef WITH_SQARE_OF_SPEED
+	 float advance_stepsx256 = (STEPS_PER_CUBIC_MM_E * extruder_advance_k) * ( current_speed[E_AXIS] * current_speed[E_AXIS] * EXTRUSION_AREA ) * 256;
+#else
+	 // it seems to over-advance if we use the square of the speed - higher speeds needed lower constants, by a large factor
+	 float advance_stepsx256 = (STEPS_PER_CUBIC_MM_E * extruder_advance_k) * ( current_speed[E_AXIS] * EXTRUSION_AREA ) * 256;
+#endif
+    block->advance = advance_stepsx256;
+
+	 // do a nominal calculation - if it's replanned they will be revised
+
+	 long acc_dist = estimate_acceleration_distance( 0, block->nominal_rate, block->acceleration_st );
+    if ( acc_dist == 0 ) {
       block->advance_rate = 0;
+		block->unadvance_rate = 0;
     } 
     else {
-      block->advance_rate = advance / (float)acc_dist;
-    }
+	   // this is a differential advance rate, only correct if the initial speed was zero. 
+      block->advance_rate = advance_stepsx256 / (float)acc_dist;		// spread the advance evenly across the entire acceleration distance
+		block->unadvance_rate = block->advance_rate;
+   }
+
+
   }
   /*
     SERIAL_ECHO_START;

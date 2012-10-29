@@ -40,7 +40,7 @@ block_t *current_block;  // A pointer to the block currently being traced
 //===========================================================================
 //=============================private variables ============================
 //===========================================================================
-//static makes it inpossible to be called from outside of this file by extern.!
+//static makes it impossible to be called from outside of this file by extern.!
 
 // Variables used by The Stepper Driver Interrupt
 static unsigned char out_bits;        // The next stepping-bits to be output
@@ -50,13 +50,13 @@ static long counter_x,       // Counter variables for the bresenham line tracer
             counter_e;
 volatile static unsigned long step_events_completed; // The number of step events executed in the current block
 #ifdef ADVANCE
-  static long advance_rate, advance, final_advance = 0;
+  static long advance_rate, unadvance_rate, advance, final_advance = 0;
   static long old_advance = 0;
 #endif
 static long e_steps[3];
 static long acceleration_time, deceleration_time;
 //static unsigned long accelerate_until, decelerate_after, acceleration_rate, initial_rate, final_rate, nominal_rate;
-static unsigned short acc_step_rate; // needed for deccelaration start point
+static unsigned short acc_step_rate; // needed for decelaration start point
 static char step_loops;
 static unsigned short OCR1A_nominal;
 
@@ -279,11 +279,13 @@ FORCE_INLINE unsigned short calc_timer(unsigned short step_rate) {
 // block begins.
 FORCE_INLINE void trapezoid_generator_reset() {
   #ifdef ADVANCE
-    advance = current_block->initial_advance;
-    final_advance = current_block->final_advance;
+    advance        = current_block->initial_advance;
+	 advance_rate   = current_block->advance_rate;
+	 unadvance_rate = current_block->unadvance_rate;
+    final_advance  = current_block->final_advance;
     // Do E steps + advance steps
-    e_steps[current_block->active_extruder] += ((advance >>8) - old_advance);
-    old_advance = advance >>8;  
+    e_steps[current_block->active_extruder] += ((advance >> 8) - old_advance);
+    old_advance = advance >> 8;  
   #endif
   deceleration_time = 0;
   // step_rate to timer interval
@@ -608,7 +610,8 @@ ISR(TIMER1_COMPA_vect)
       step_events_completed += 1;  
       if(step_events_completed >= current_block->step_event_count) break;
     }
-    // Calculare new timer value
+
+    // Calculate new timer value
     unsigned short timer;
     unsigned short step_rate;
     if (step_events_completed <= (unsigned long int)current_block->accelerate_until) {
@@ -625,9 +628,11 @@ ISR(TIMER1_COMPA_vect)
       OCR1A = timer;
       acceleration_time += timer;
       #ifdef ADVANCE
-        for(int8_t i=0; i < step_loops; i++) {
+			// adjust advance based on the rate of change of advance that was set up
+        for ( int8_t i=0; i < step_loops; i++ ) {
           advance += advance_rate;
         }
+
         //if(advance > current_block->advance) advance = current_block->advance;
         // Do E steps + advance steps
         e_steps[current_block->active_extruder] += ((advance >>8) - old_advance);
@@ -642,7 +647,7 @@ ISR(TIMER1_COMPA_vect)
         step_rate = current_block->final_rate;
       }
       else {
-        step_rate = acc_step_rate - step_rate; // Decelerate from aceleration end point.
+        step_rate = acc_step_rate - step_rate; // Decelerate from acceleration end point.
       }
 
       // lower limit
@@ -655,7 +660,7 @@ ISR(TIMER1_COMPA_vect)
       deceleration_time += timer;
       #ifdef ADVANCE
         for(int8_t i=0; i < step_loops; i++) {
-          advance -= advance_rate;
+          advance -= unadvance_rate;
         }
         if(advance < final_advance) advance = final_advance;
         // Do E steps + advance steps
@@ -681,22 +686,24 @@ ISR(TIMER1_COMPA_vect)
   // Timer 0 is shared with millies
   ISR(TIMER0_COMPA_vect)
   {
-    old_OCR0A += 52; // ~10kHz interrupt (250000 / 26 = 9615kHz)
+    old_OCR0A = 52; // ~10kHz interrupt (250000 / 26 = 9615kHz)
     OCR0A = old_OCR0A;
     // Set E direction (Depends on E direction + advance)
-    for(unsigned char i=0; i<4;i++) {
+	 const int MAX_E_STEPS_PER_TIMER_TICK = 4; // don't generate a flurry of extra ticks. The stepper can only react to a limited number per millisecond.
+    for ( unsigned char i=0; i < MAX_E_STEPS_PER_TIMER_TICK; i++ ) {
       if (e_steps[0] != 0) {
+			// direction changes may only occur when the step pin is going to be stable, or has been stable for a minimum time (200ns for Allegro A4982).
+			// There's a bit of code before and after the direction setting here, so it's probably OK.
         WRITE(E0_STEP_PIN, INVERT_E_STEP_PIN);
-        if (e_steps[0] < 0) {
+        if ( e_steps[0] < 0 ) {
           WRITE(E0_DIR_PIN, INVERT_E0_DIR);
           e_steps[0]++;
-          WRITE(E0_STEP_PIN, !INVERT_E_STEP_PIN);
         } 
-        else if (e_steps[0] > 0) {
+        else if ( e_steps[0] > 0 ) {
           WRITE(E0_DIR_PIN, !INVERT_E0_DIR);
           e_steps[0]--;
-          WRITE(E0_STEP_PIN, !INVERT_E_STEP_PIN);
         }
+		  WRITE(E0_STEP_PIN, !INVERT_E_STEP_PIN);
       }
  #if EXTRUDERS > 1
       if (e_steps[1] != 0) {
