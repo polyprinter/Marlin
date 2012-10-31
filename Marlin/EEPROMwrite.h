@@ -210,6 +210,9 @@ inline void EEPROM_RetrieveSettings(bool def=false)
       max_xy_jerk=DEFAULT_XYJERK;
       max_z_jerk=DEFAULT_ZJERK;
       max_e_jerk=DEFAULT_EJERK;
+#ifdef ADVANCE
+		extruder_advance_k = DEFAULT_EXTRUDER_ADVANCE_K; 
+#endif
       add_homeing[0] = add_homeing[1] = add_homeing[2] = 0;
       SERIAL_ECHO_START;
       SERIAL_ECHOLN("Using Default settings:");

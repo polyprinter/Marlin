@@ -120,6 +120,7 @@
 // M302 - Allow cold extrudes
 // M303 - PID relay autotune S<temperature> sets the target temperature. (default target temperature = 150C)
 // M304 - Set bed PID parameters P I and D
+// M305 - Set Advance constant x1000 parameter A
 // M400 - Finish all moves
 // M500 - stores paramters in EEPROM
 // M501 - reads parameters from EEPROM (if you need reset them after you changed them temporarily).  
@@ -132,7 +133,9 @@
 //===========================================================================
 //=============================imported variables============================
 //===========================================================================
-
+#ifdef ADVANCE
+extern float extruder_advance_k;
+#endif
 
 //===========================================================================
 //=============================public variables=============================
@@ -1454,6 +1457,18 @@ void process_commands()
       PID_autotune(temp, e, c);
     }
     break;
+	 #ifdef ADVANCE
+    case 305: // M305 AadvanceFactor*1000 e.g. 100 for a value of .100
+      {
+        if(code_seen('A')) extruder_advance_k = code_value() / 1000;
+        SERIAL_PROTOCOL(MSG_OK);
+		  SERIAL_PROTOCOL(" a:");
+        SERIAL_PROTOCOL(extruder_advance_k);
+        SERIAL_PROTOCOLLN("");
+      }
+      break;
+    #endif //PIDTEMP
+
     case 400: // M400 finish all moves
     {
       st_synchronize();

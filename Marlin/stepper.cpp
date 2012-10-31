@@ -44,7 +44,7 @@ block_t *current_block;  // A pointer to the block currently being traced
 
 // Variables used by The Stepper Driver Interrupt
 static unsigned char out_bits;        // The next stepping-bits to be output
-static long counter_x,       // Counter variables for the bresenham line tracer
+static long counter_x,       // Counter variables for the Bresenham line tracer
             counter_y, 
             counter_z,       
             counter_e;
@@ -56,7 +56,7 @@ volatile static unsigned long step_events_completed; // The number of step event
 static long e_steps[3];
 static long acceleration_time, deceleration_time;
 //static unsigned long accelerate_until, decelerate_after, acceleration_rate, initial_rate, final_rate, nominal_rate;
-static unsigned short acc_step_rate; // needed for decelaration start point
+static unsigned short acc_step_rate; // needed for deceleration start point
 static char step_loops;
 static unsigned short OCR1A_nominal;
 
@@ -306,6 +306,15 @@ FORCE_INLINE void trapezoid_generator_reset() {
     
 }
 
+#ifdef ADVANCE
+#define DYNAMIC_ADVANCE_OPTION
+
+extern float extruder_advance_k;
+#ifndef ADVANCE_HAS_OWN_INTERRUPT_SERVICE_ROUTINE
+void HandleExtruderAdvance();
+#endif
+#endif
+
 // "The Stepper Driver Interrupt" - This timer interrupt is the workhorse.  
 // It pops blocks from the block_buffer and executes them by pulsing the stepper pins appropriately. 
 ISR(TIMER1_COMPA_vect)
@@ -339,6 +348,10 @@ ISR(TIMER1_COMPA_vect)
         OCR1A=2000; // 1kHz.
     }    
   } 
+
+#ifdef DYNAMIC_ADVANCE_OPTION
+  bool doAdvance = ( extruder_advance_k > 0  );
+#endif
 
   if (current_block != NULL) {
     // Set directions TO DO This should be done once during init of trapezoid. Endstops -> interrupt
@@ -483,37 +496,36 @@ ISR(TIMER1_COMPA_vect)
         #endif
       }
     }
-
-    #ifndef ADVANCE
+#ifdef DYNAMIC_ADVANCE_OPTION
+	 if ((out_bits & (1<<E_AXIS)) != 0) {  // -direction
+		 if ( ! doAdvance ) REV_E_DIR();
+		 count_direction[E_AXIS]=-1;
+		 }
+	 else { // +direction
+		 if ( ! doAdvance ) NORM_E_DIR();
+		 count_direction[E_AXIS]=1;
+		 }
+#else
       if ((out_bits & (1<<E_AXIS)) != 0) {  // -direction
-        REV_E_DIR();
+#ifndef ADVANCE
+       REV_E_DIR();
+#endif //!ADVANCE
         count_direction[E_AXIS]=-1;
       }
       else { // +direction
-        NORM_E_DIR();
-        count_direction[E_AXIS]=1;
+#ifndef ADVANCE
+       NORM_E_DIR();
+#endif //!ADVANCE
+       count_direction[E_AXIS]=1;
       }
-    #endif //!ADVANCE
     
-
+#endif
     
-    for(int8_t i=0; i < step_loops; i++) { // Take multiple steps per interrupt (For high speed moves) 
+	int8_t loops_completed = 0; // keep outside loop because advance needs to know how many loops were completed
+   for( ; loops_completed < step_loops; ++loops_completed ) { // Take multiple steps per interrupt (For high speed moves) 
       #if !defined(__AVR_AT90USB1286__) && !defined(__AVR_AT90USB1287__)
       MSerial.checkRx(); // Check for serial chars.
       #endif 
-      
-      #ifdef ADVANCE
-      counter_e += current_block->steps_e;
-      if (counter_e > 0) {
-        counter_e -= current_block->step_event_count;
-        if ((out_bits & (1<<E_AXIS)) != 0) { // - direction
-          e_steps[current_block->active_extruder]--;
-        }
-        else {
-          e_steps[current_block->active_extruder]++;
-        }
-      }    
-      #endif //ADVANCE
       
       #if !defined COREXY      
       counter_x += current_block->steps_x;
@@ -598,24 +610,41 @@ ISR(TIMER1_COMPA_vect)
         #endif
       }
 
-      #ifndef ADVANCE
-        counter_e += current_block->steps_e;
-        if (counter_e > 0) {
-          WRITE_E_STEP(!INVERT_E_STEP_PIN);
-          counter_e -= current_block->step_event_count;
-          count_position[E_AXIS]+=count_direction[E_AXIS];
+      counter_e += current_block->steps_e;
+      if (counter_e > 0) {
+#ifdef DYNAMIC_ADVANCE_OPTION
+			if ( ! doAdvance ) WRITE_E_STEP(!INVERT_E_STEP_PIN);
+			counter_e -= current_block->step_event_count;
+			count_position[E_AXIS] += count_direction[E_AXIS];
+			if ( doAdvance ) {
+				e_steps[current_block->active_extruder] += count_direction[E_AXIS];
+			}
+			else {
+			    WRITE_E_STEP(INVERT_E_STEP_PIN);
+			}
+#else
+#ifndef ADVANCE  //!ADVANCE
+        WRITE_E_STEP(!INVERT_E_STEP_PIN);
+#endif           //!ADVANCE
+        counter_e -= current_block->step_event_count;
+		 count_position[E_AXIS] += count_direction[E_AXIS];
+#ifdef ADVANCE
+			 e_steps[current_block->active_extruder] += count_direction[E_AXIS];
+#else  //!ADVANCE
           WRITE_E_STEP(INVERT_E_STEP_PIN);
-        }
-      #endif //!ADVANCE
+#endif //!ADVANCE
+#endif
+	  }
+
       step_events_completed += 1;  
       if(step_events_completed >= current_block->step_event_count) break;
-    }
+		}  // end of looping
 
     // Calculate new timer value
     unsigned short timer;
     unsigned short step_rate;
     if (step_events_completed <= (unsigned long int)current_block->accelerate_until) {
-      
+      // still accelerating
       MultiU24X24toH16(acc_step_rate, acceleration_time, current_block->acceleration_rate);
       acc_step_rate += current_block->initial_rate;
       
@@ -628,16 +657,19 @@ ISR(TIMER1_COMPA_vect)
       OCR1A = timer;
       acceleration_time += timer;
       #ifdef ADVANCE
+#ifdef DYNAMIC_ADVANCE_OPTION
+		if ( doAdvance ) {
+#endif
 			// adjust advance based on the rate of change of advance that was set up
-        for ( int8_t i=0; i < step_loops; i++ ) {
-          advance += advance_rate;
-        }
+        advance += loops_completed * advance_rate;
 
         //if(advance > current_block->advance) advance = current_block->advance;
         // Do E steps + advance steps
         e_steps[current_block->active_extruder] += ((advance >>8) - old_advance);
         old_advance = advance >>8;  
-        
+#ifdef DYNAMIC_ADVANCE_OPTION
+		}
+#endif
       #endif
     } 
     else if (step_events_completed > (unsigned long int)current_block->decelerate_after) {   
@@ -659,13 +691,17 @@ ISR(TIMER1_COMPA_vect)
       OCR1A = timer;
       deceleration_time += timer;
       #ifdef ADVANCE
-        for(int8_t i=0; i < step_loops; i++) {
-          advance -= unadvance_rate;
-        }
-        if(advance < final_advance) advance = final_advance;
+#ifdef DYNAMIC_ADVANCE_OPTION
+		if ( doAdvance ) {
+#endif
+        advance -= loops_completed *unadvance_rate;
+        //if(advance < final_advance) advance = final_advance;
         // Do E steps + advance steps
         e_steps[current_block->active_extruder] += ((advance >>8) - old_advance);
-        old_advance = advance >>8;  
+        old_advance = advance >> 8;  
+#ifdef DYNAMIC_ADVANCE_OPTION
+			}
+#endif
       #endif //ADVANCE
     }
     else {
@@ -678,18 +714,40 @@ ISR(TIMER1_COMPA_vect)
       plan_discard_current_block();
     }   
   } 
+
+#ifdef ADVANCE
+#ifndef ADVANCE_HAS_OWN_INTERRUPT_SERVICE_ROUTINE
+#ifdef DYNAMIC_ADVANCE_OPTION
+  if ( doAdvance ) {
+#endif
+  HandleExtruderAdvance();
+#ifdef DYNAMIC_ADVANCE_OPTION
+  }
+#endif
+#endif
+#endif
 }
 
 #ifdef ADVANCE
+ #ifdef ADVANCE_HAS_OWN_INTERRUPT_SERVICE_ROUTINE
   unsigned char old_OCR0A;
   // Timer interrupt for E. e_steps is set in the main routine;
   // Timer 0 is shared with millies
   ISR(TIMER0_COMPA_vect)
   {
-    old_OCR0A = 52; // ~10kHz interrupt (250000 / 26 = 9615kHz)
+	 // update the match register to re-interrupt at the right time
+    old_OCR0A += 52; // ~10kHz interrupt (250000 / 26 = 9615kHz)
     OCR0A = old_OCR0A;
+	 const int MAX_E_STEPS_PER_TIMER_TICK = 2; // don't generate a flurry of extra ticks. The stepper can only react to a limited number per millisecond.
+ #else
+void HandleExtruderAdvance()
+	{
+	// we only get called once per main step - no fixed timing, but the timing will be more frequent along with increasing speed of the head.
+	// It's not necessarily the best, but it does end up allowing an acceleration type pattern to occur.
+	//const int MAX_E_STEPS_PER_TIMER_TICK = 4; // don't generate a flurry of extra ticks. The stepper can only react to a limited number per millisecond.
+	const int MAX_E_STEPS_PER_TIMER_TICK = 1; // don't generate a flurry of extra ticks. The stepper can only react to a limited number per millisecond.
+ #endif
     // Set E direction (Depends on E direction + advance)
-	 const int MAX_E_STEPS_PER_TIMER_TICK = 4; // don't generate a flurry of extra ticks. The stepper can only react to a limited number per millisecond.
     for ( unsigned char i=0; i < MAX_E_STEPS_PER_TIMER_TICK; i++ ) {
       if (e_steps[0] != 0) {
 			// direction changes may only occur when the step pin is going to be stable, or has been stable for a minimum time (200ns for Allegro A4982).
@@ -905,16 +963,19 @@ void st_init()
   TCNT1 = 0;
   ENABLE_STEPPER_DRIVER_INTERRUPT();  
 
-  #ifdef ADVANCE
+#ifdef ADVANCE
+  e_steps[0] = 0;
+  e_steps[1] = 0;
+  e_steps[2] = 0;
+ #ifdef ADVANCE_HAS_OWN_INTERRUPT_SERVICE_ROUTINE
+  // set up interrupt
   #if defined(TCCR0A) && defined(WGM01)
     TCCR0A &= ~(1<<WGM01);
     TCCR0A &= ~(1<<WGM00);
   #endif  
-    e_steps[0] = 0;
-    e_steps[1] = 0;
-    e_steps[2] = 0;
     TIMSK0 |= (1<<OCIE0A);
-  #endif //ADVANCE
+ #endif // ADVANCE_HAS_OWN_INTERRUPT_SERVICE_ROUTINE
+#endif //ADVANCE
   
   enable_endstops(true); // Start with endstops active. After homing they can be disabled
   sei();

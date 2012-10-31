@@ -76,7 +76,7 @@ float mintravelfeedrate;
 unsigned long axis_steps_per_sqr_second[NUM_AXIS];
 
 #ifdef ADVANCE
-float extruder_advance_k = EXTRUDER_ADVANCE_K; // defaulted
+float extruder_advance_k; // defaulted elsewhere
 #endif
 
 // The current position of the tool in absolute steps
@@ -189,14 +189,20 @@ void calculate_trapezoid_for_block(block_t *block, float entry_factor, float exi
     floor(estimate_acceleration_distance(block->nominal_rate, block->final_rate, -acceleration));
 
 #ifdef ADVANCE
+ #ifdef ADVANCE_WITH_SQUARE_LAW
   long init_advance = block->advance*entry_factor*entry_factor; 
   long fin_advance  = block->advance*exit_factor*exit_factor;
+ #else
+  // it's linear
+  long init_advance = block->advance * entry_factor; 
+  long fin_advance  = block->advance * exit_factor;
+ #endif
   long nominal_accel_steps = accelerate_steps;
   long nominal_decel_steps = decelerate_steps;
 #endif // ADVANCE
 
   // Calculate the size of Plateau of Nominal Rate.
-  int32_t plateau_steps = block->step_event_count-accelerate_steps-decelerate_steps;
+  int32_t plateau_steps = block->step_event_count - accelerate_steps-decelerate_steps;
 
   // Is the Plateau of Nominal Rate smaller than nothing? That means no cruising, and we will
   // have to use intersection_distance() to calculate when to abort acceleration and start braking
@@ -214,9 +220,9 @@ void calculate_trapezoid_for_block(block_t *block, float entry_factor, float exi
   CRITICAL_SECTION_START;  // Fill variables used by the stepper in a critical section
   if ( block->busy == false ) { // Don't update variables if block is busy.
     block->accelerate_until = accelerate_steps;
-    block->decelerate_after = accelerate_steps+plateau_steps;
+    block->decelerate_after = accelerate_steps + plateau_steps;
     block->initial_rate = initial_rate;
-    block->final_rate = final_rate;
+    block->final_rate   = final_rate;
 #ifdef ADVANCE
     block->initial_advance = init_advance;
     block->final_advance   = fin_advance;
@@ -802,8 +808,7 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
 
 
 #ifdef ADVANCE
-  // TODO: this should be done separately for acceleration and deceleration, and done in the calculate_trapezoid_for_block() function
-  block->advance_rate = 0;
+  block->advance_rate   = 0;
   block->unadvance_rate = 0;
 
   // Calculate advance 
@@ -812,27 +817,21 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
   }
   else {
 	 //float advance = (STEPS_PER_CUBIC_MM_E * EXTRUDER_ADVANCE_K) * (current_speed[E_AXIS] * current_speed[E_AXIS] * EXTRUSION_AREA * EXTRUSION_AREA ) * 256;
-#ifdef WITH_SQARE_OF_SPEED
+ #ifdef ADVANCE_WITH_SQARE_LAW
 	 float advance_stepsx256 = (STEPS_PER_CUBIC_MM_E * extruder_advance_k) * ( current_speed[E_AXIS] * current_speed[E_AXIS] * EXTRUSION_AREA ) * 256;
-#else
+ #else
 	 // it seems to over-advance if we use the square of the speed - higher speeds needed lower constants, by a large factor
 	 float advance_stepsx256 = (STEPS_PER_CUBIC_MM_E * extruder_advance_k) * ( current_speed[E_AXIS] * EXTRUSION_AREA ) * 256;
-#endif
+ #endif
     block->advance = advance_stepsx256;
 
 	 // do a nominal calculation - if it's replanned they will be revised
-
 	 long acc_dist = estimate_acceleration_distance( 0, block->nominal_rate, block->acceleration_st );
-    if ( acc_dist == 0 ) {
-      block->advance_rate = 0;
-		block->unadvance_rate = 0;
-    } 
-    else {
+    if ( acc_dist > 0 ) {
 	   // this is a differential advance rate, only correct if the initial speed was zero. 
       block->advance_rate = advance_stepsx256 / (float)acc_dist;		// spread the advance evenly across the entire acceleration distance
 		block->unadvance_rate = block->advance_rate;
-   }
-
+    }
 
   }
   /*
