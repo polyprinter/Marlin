@@ -29,7 +29,7 @@
 // This struct is used when buffering the setup for each linear movement "nominal" values are as specified in 
 // the source g-code and may never actually be reached if acceleration management is active.
 typedef struct {
-  // Fields used by the bresenham algorithm for tracing the line
+  // Fields used by the Bresenham algorithm for tracing the line
   long steps_x, steps_y, steps_z, steps_e;  // Step count along each axis
   unsigned long step_event_count;           // The number of step events required to complete this block
   long accelerate_until;                    // The index of the step event on which to stop acceleration
@@ -37,13 +37,13 @@ typedef struct {
   long acceleration_rate;                   // The acceleration rate used for acceleration calculation
   unsigned char direction_bits;             // The direction bit set for this block (refers to *_DIRECTION_BIT in config.h)
   unsigned char active_extruder;            // Selects the active extruder
-  #ifdef ADVANCE
-    long advance_rate;
-	 long unadvance_rate;
-   volatile long initial_advance;
-    volatile long final_advance;
-    float advance;
-  #endif
+#ifdef ADVANCE
+	 int advance_rate;
+	 int unadvance_rate;
+	 long initial_advance;
+	 long final_advance;
+	 float advance;
+#endif
 
   // Fields used by the motion planner to manage acceleration
 //  float speed_x, speed_y, speed_z, speed_e;        // Nominal mm/sec for each axis
@@ -92,6 +92,7 @@ extern float max_z_jerk;
 extern float max_e_jerk;
 extern float mintravelfeedrate;
 extern unsigned long axis_steps_per_sqr_second[NUM_AXIS];
+extern float extruder_advance_k;
 
 #ifdef AUTOTEMP
     extern bool autotemp_enabled;
