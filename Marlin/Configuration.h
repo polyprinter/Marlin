@@ -62,10 +62,10 @@
 // 52 is 200k thermistor - ATC Semitec 204GT-2 (1k pullup)
 // 55 is 100k thermistor - ATC Semitec 104GT-2 (Used in ParCan) (1k pullup)
 
-#define TEMP_SENSOR_0 1  
+#define TEMP_SENSOR_0 100474092  // 100k, 4.7 k pullup, EPCOS, Beta 4072
 #define TEMP_SENSOR_1 0
 #define TEMP_SENSOR_2 0
-#define TEMP_SENSOR_BED 1
+#define TEMP_SENSOR_BED 100474275 // 100k, 4.7 k pullup, MuRata NXFT15WF104FA2B025
 
 // Actual temperature must be close to target for this long before M109 returns success
 #define TEMP_RESIDENCY_TIME 10	// (seconds)
@@ -135,7 +135,7 @@
 //
 //#define BED_LIMIT_SWITCHING
 
-// This sets the max power delived to the bed, and replaces the HEATER_BED_DUTY_CYCLE_DIVIDER option.
+// This sets the max power delivered to the bed, and replaces the HEATER_BED_DUTY_CYCLE_DIVIDER option.
 // all forms of bed control obey this (PID, bang-bang, bang-bang with hysteresis)
 // setting this to anything other than 255 enables a form of PWM to the bed just like HEATER_BED_DUTY_CYCLE_DIVIDER did,
 // so you shouldn't use it unless you are OK with PWM on your bed.  (see the comment on enabling PIDTEMPBED)
