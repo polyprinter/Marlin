@@ -297,6 +297,8 @@ const bool Z_ENDSTOPS_INVERTING = false; // set to true to invert the logic of t
 //=============================Additional Features===========================
 //===========================================================================
 
+#define VARY_ACCEL_WITH_Z
+
 // EEPROM
 // the microcontroller can store settings in the EEPROM, e.g. max velocity...
 // M500 - stores paramters in EEPROM
