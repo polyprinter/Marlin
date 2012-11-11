@@ -202,6 +202,12 @@ static uint8_t tmp_extruder;
 
 bool Stopped=false;
 
+#ifdef VARY_ACCEL_WITH_Z
+float acceleration_taper_height = Z_MAX_POS;
+float acceleration_taper_x = 1.0f;
+float acceleration_taper_y = 1.0f;
+#endif
+
 //===========================================================================
 //=============================ROUTINES=============================
 //===========================================================================
@@ -1479,6 +1485,34 @@ void process_commands()
       EEPROM_printSettings();
     }
     break;
+
+#ifdef VARY_ACCEL_WITH_Z
+	 case 900: // Change acceleration settings as Z increases.
+    {
+		/*
+		// Uses a square law
+		M900 Z100 X50   ; // at Z of 100 and above, taper the acceration of X to 50% at Max Z
+		M900 Z100 X50 Y25   ; // at Z of 100 and above, taper the acceration of X to 50%, and Y to 25% at Max Z
+		*/
+      if ( code_seen('Z') ) 
+      {
+			acceleration_taper_height = code_value();
+      }
+      
+		if ( code_seen('X') ) 
+      {
+        acceleration_taper_x = code_value();
+      }
+
+		if ( code_seen('Y') ) 
+      {
+        acceleration_taper_y = code_value();
+      }
+
+    }
+    break;
+#endif
+
     case 999: // Restart after being stopped
       Stopped = false;
       gcode_LastN = Stopped_gcode_LastN;
@@ -1631,14 +1665,32 @@ void prepare_move()
 {
   clamp_to_software_endstops(destination);
 
+#ifdef VARY_ACCEL_WITH_Z
+	// use the destination Z as the determinant for setting up the acceleration limit based on Z
+  float accelFactor_x = 1.0f;
+  float accelFactor_y = 1.0f;
+
+  if ( destination[Z_AXIS] > acceleration_taper_height && Z_MAX_POS > acceleration_taper_height ) {
+	  float fractionalRangeInv = ( Z_MAX_POS - destination[Z_AXIS] ) / ( Z_MAX_POS - acceleration_taper_height );  // how far from max height to taper height
+	  // taper the acceleration
+	  accelFactor_x = acceleration_taper_x + fractionalRangeInv * ( 1.0f - acceleration_taper_x );
+	  accelFactor_y = acceleration_taper_y + fractionalRangeInv * ( 1.0f - acceleration_taper_y );
+	}
+
+ axis_steps_per_sqr_second[X_AXIS] = accelFactor_x * max_acceleration_units_per_sq_second[X_AXIS] * axis_steps_per_unit[X_AXIS];
+ axis_steps_per_sqr_second[Y_AXIS] = accelFactor_y * max_acceleration_units_per_sq_second[Y_AXIS] * axis_steps_per_unit[Y_AXIS];
+#endif
+
   previous_millis_cmd = millis();  
+  
   // Do not use feedmultiply for E or Z only moves
   if( (current_position[X_AXIS] == destination [X_AXIS]) && (current_position[Y_AXIS] == destination [Y_AXIS])) {
       plan_buffer_line(destination[X_AXIS], destination[Y_AXIS], destination[Z_AXIS], destination[E_AXIS], feedrate/60, active_extruder);
   }
   else {
-  plan_buffer_line(destination[X_AXIS], destination[Y_AXIS], destination[Z_AXIS], destination[E_AXIS], feedrate*feedmultiply/60/100.0, active_extruder);
+	plan_buffer_line(destination[X_AXIS], destination[Y_AXIS], destination[Z_AXIS], destination[E_AXIS], feedrate*feedmultiply/60/100.0, active_extruder);
   }
+
   for(int8_t i=0; i < NUM_AXIS; i++) {
     current_position[i] = destination[i];
   }
