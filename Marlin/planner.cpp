@@ -171,6 +171,10 @@ FORCE_INLINE float intersection_distance(float initial_rate, float final_rate, f
 // Calculates trapezoid parameters so that the entry- and exit-speed is compensated by the provided factors.
 
 void calculate_trapezoid_for_block(block_t *block, float entry_factor, float exit_factor) {
+	// never allow speeds faster than the nominal rate for the block
+	entry_factor = min( entry_factor, 1.0f );
+	exit_factor  = min( exit_factor,  1.0f );
+
   unsigned long initial_rate = ceil(block->nominal_rate*entry_factor); // (step/min)
   unsigned long final_rate = ceil(block->nominal_rate*exit_factor); // (step/min)
 

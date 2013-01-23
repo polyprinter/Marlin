@@ -19,8 +19,8 @@
 // Wait for Cooldown
 // This defines if the M109 call should not block if it is cooling down.
 // example: From a current temp of 220, you set M109 S200. 
-// if CooldownNoWait is defined M109 will not wait for the cooldown to finish
-#define CooldownNoWait true
+// if CooldownWait is defined, M109 will wait for the cooldown to finish. If it defined false then cooldowns will not wait.
+#define CooldownWait false
 
 #ifdef PIDTEMP
   // this adds an experimental additional term to the heatingpower, proportional to the extrusion speed.

@@ -229,12 +229,16 @@ FORCE_INLINE unsigned short calc_timer(unsigned short step_rate) {
   unsigned short timer;
   //if ( step_rate > MAX_STEP_FREQUENCY ) step_rate = MAX_STEP_FREQUENCY;
   
-  if ( step_rate > 2*MAX_INTERRUPT_RATE_HZ ) { // If steprate > 20kHz >> step 4 times
-    step_rate = (step_rate >> 2)&0x3fff;
+  if ( step_rate > 3*MAX_INTERRUPT_RATE_HZ ) { // If steprate > 30kHz >> step 4 times
+    step_rate = (step_rate >> 2);
     step_loops = 4;
   }
+  if ( step_rate > 2*MAX_INTERRUPT_RATE_HZ ) { // If steprate > 20kHz >> step 3 times
+	  step_rate = step_rate / 3;
+	  step_loops = 3;
+	  }
   else if ( step_rate > MAX_INTERRUPT_RATE_HZ ) { // If steprate > 10kHz >> step 2 times
-    step_rate = (step_rate >> 1)&0x7fff;
+    step_rate = (step_rate >> 1);
     step_loops = 2;
   }
   else {

@@ -62,7 +62,7 @@
 // 52 is 200k thermistor - ATC Semitec 204GT-2 (1k pullup)
 // 55 is 100k thermistor - ATC Semitec 104GT-2 (Used in ParCan) (1k pullup)
 
-#define TEMP_SENSOR_0 100474092  // 100k, 4.7 k pullup, EPCOS, Beta 4072
+#define TEMP_SENSOR_0 100474240  // 100k, 4.7 k pullup, EPCOS, Beta 4240 which is fudged from 4092 mfg value - don't know why it has to be that far off.
 #define TEMP_SENSOR_1 0
 #define TEMP_SENSOR_2 0
 #define TEMP_SENSOR_BED 100474275 // 100k, 4.7 k pullup, MuRata NXFT15WF104FA2B025
@@ -83,7 +83,7 @@
 // When temperature exceeds max temp, your heater will be switched off.
 // This feature exists to protect your hotend from overheating accidentally, but *NOT* from thermistor short/failure!
 // You should use MINTEMP for thermistor short/failure protection.
-#define HEATER_0_MAXTEMP 275
+#define HEATER_0_MAXTEMP 280
 #define HEATER_1_MAXTEMP 275
 #define HEATER_2_MAXTEMP 275
 #define BED_MAXTEMP 150
@@ -230,12 +230,26 @@ const bool Z_ENDSTOPS_INVERTING = false; // set to true to invert the logic of t
 
 #define min_software_endstops true //If true, axis won't move to coordinates less than HOME_POS.
 #define max_software_endstops true  //If true, axis won't move to coordinates greater than the defined lengths below.
+
 // Travel limits after homing
+#define GIGANTOX  // extra-long X travel
+#ifdef GIGANTOX
+#define X_MAX_POS 490  // 483 nominal
+#else
 #define X_MAX_POS 236
+#endif
 #define X_MIN_POS 0
-#define Y_MAX_POS 228
+
+//#define GIGANTOY  // extra-long Y travel
+#ifdef GIGANTOY
+#define Y_MAX_POS 533
 #define Y_MIN_POS 0
-#define Z_MAX_POS 225
+#else
+#define Y_MAX_POS 230  // 229 spec, 2mm to spare
+#define Y_MIN_POS 0
+#endif
+
+#define Z_MAX_POS 235
 #define Z_MIN_POS 0
 
 #define X_MAX_LENGTH (X_MAX_POS - X_MIN_POS)
@@ -266,7 +280,7 @@ const bool Z_ENDSTOPS_INVERTING = false; // set to true to invert the logic of t
 //      -The term ((NozzleDiameter^2)/(ExtrudedFilamentDiamter^2) from the above articles is consolidated to the term "PackingDensity"
 // INSTRUCTIONS: ENTER PARAMETERS BELOW FOR YOUR EQUIPMENT.
 #define MICROSTEPPING_RATIO 0.0625  // Enter microstepping ratio of electronics. Printrboard and Pololu = 1/16, Gen6 = 1/8, etc.
-#define XY_MTR_STPS 400      		// Enter number of steps per one revolution of the X and Y motors. See motor datasheet, 1.8degree = 200 steps, 0.9degree = 400 steps
+#define XY_MTR_STPS 200      		// Enter number of steps per one revolution of the X and Y motors. See motor datasheet, 1.8degree = 200 steps, 0.9degree = 400 steps
 #define Z_MTR_STPS 200      		// Enter number of steps per one revolution of the Z motor(s).
 #define EXTRUDER_MTR_STPS 200      	// Enter number of steps per one revolution of the extruder motor.
 
@@ -275,7 +289,7 @@ const bool Z_ENDSTOPS_INVERTING = false; // set to true to invert the logic of t
 #define EXTRUDER_GEAR_RATIO 1/1  	// Enter gear ratio of extruder. Wade's Extruder: 39/11, Accessible Wade's by Greg Frost: 43/10, Adrian's Extruder: 59/11, etc.
 
 #define BELT_PITCH 2.0				// Enter pitch of X and Y belts in millimeters (space from tooth to tooth). XL belts = 5.08mm
-#define GEAR_TEETH 22				// Enter number of teeth on X and Y gears
+#define GEAR_TEETH 20				// Enter number of teeth on X and Y gears
 #define Z_ROD_PITCH	1.0			// Enter pitch of Z rods in millimeters. Pitch = 1.25mm for directly driven M8 rods.
 // ************* End MECHANICAL Calibration *************
 

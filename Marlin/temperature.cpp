@@ -575,6 +575,15 @@ float analog2temp(int raw, uint8_t e) {
     short (*tt)[][2] = (short (*)[][2])(heater_ttbl_map[e]);
 
     raw = (1023 * OVERSAMPLENR) - raw;
+#ifdef LOG_TEMP_RAW
+	 static int cycler = 0;
+	 if ( e == 0 && ( (++cycler) % 29 ) == 0 )
+		 {
+		 //return (float)raw / OVERSAMPLENR;
+		SERIAL_PROTOCOLPGM("raw: "); SERIAL_PROTOCOL((float)raw / OVERSAMPLENR);
+		 }
+#endif
+
     for (i=1; i<heater_ttbllen_map[e]; i++)
     {
       if (PGM_RD_W((*tt)[i][0]) > raw)
@@ -1037,19 +1046,21 @@ ISR(TIMER0_COMPB_vect)
 //      break;
   }
     
+  const unsigned int MAX_A2D_COUNT = 1023;
+  const unsigned int INVERSION_CONSTANT = MAX_A2D_COUNT * OVERSAMPLENR;
   if(temp_count >= 16) // 8 ms * 16 = 128ms.
   {
     #if defined(HEATER_0_USES_AD595) || defined(HEATER_0_USES_MAX6675)
       current_raw[0] = raw_temp_0_value;
     #else
-      current_raw[0] = 16383 - raw_temp_0_value;
+      current_raw[0] = INVERSION_CONSTANT - raw_temp_0_value;
     #endif
 
 #if EXTRUDERS > 1    
     #ifdef HEATER_1_USES_AD595
       current_raw[1] = raw_temp_1_value;
     #else
-      current_raw[1] = 16383 - raw_temp_1_value;
+      current_raw[1] = INVERSION_CONSTANT - raw_temp_1_value;
     #endif
 #endif
     
@@ -1057,14 +1068,14 @@ ISR(TIMER0_COMPB_vect)
     #ifdef HEATER_2_USES_AD595
       current_raw[2] = raw_temp_2_value;
     #else
-      current_raw[2] = 16383 - raw_temp_2_value;
+      current_raw[2] = INVERSION_CONSTANT - raw_temp_2_value;
     #endif
 #endif
     
     #ifdef BED_USES_AD595
       current_raw_bed = raw_temp_bed_value;
     #else
-      current_raw_bed = 16383 - raw_temp_bed_value;
+      current_raw_bed = INVERSION_CONSTANT - raw_temp_bed_value;
     #endif
     
     temp_meas_ready = true;
@@ -1080,13 +1091,13 @@ ISR(TIMER0_COMPB_vect)
           max_temp_error(e);
           #ifndef BOGUS_TEMPERATURE_FAILSAFE_OVERRIDE
           {
-            Stop();;
+            Stop();
           }
           #endif
        }
-       if(current_raw[e] <= minttemp[e]) {
+       if ( current_raw[e] <= minttemp[e] ) {
           target_raw[e] = 0;
-          min_temp_error(e);
+          min_temp_error( e );
           #ifndef BOGUS_TEMPERATURE_FAILSAFE_OVERRIDE
           {
             Stop();
@@ -1096,7 +1107,7 @@ ISR(TIMER0_COMPB_vect)
     }
   
 #if defined(BED_MAXTEMP) && (HEATER_BED_PIN > -1)
-    if(current_raw_bed >= bed_maxttemp) {
+    if ( current_raw_bed >= bed_maxttemp ) {
        target_raw_bed = 0;
        bed_max_temp_error();
        Stop();
