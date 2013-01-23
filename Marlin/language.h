@@ -182,7 +182,7 @@
 	#define MSG_SD_ERR_WRITE_TO_FILE "error writing to file"
 	#define MSG_SD_CANT_ENTER_SUBDIR "Cannot enter subdir:"
 
-	#define MSG_STEPPER_TO_HIGH "Steprate to high : "
+	#define MSG_STEPPER_TO_HIGH "Steprate too high : "
 	#define MSG_ENDSTOPS_HIT "endstops hit: "
 	#define MSG_ERR_COLD_EXTRUDE_STOP " cold extrusion prevented"
 	#define MSG_ERR_LONG_EXTRUDE_STOP " too long extrusion prevented"
@@ -340,7 +340,7 @@
 	#define MSG_SD_ERR_WRITE_TO_FILE "error writing to file"
 	#define MSG_SD_CANT_ENTER_SUBDIR "Cannot enter subdir:"
 
-	#define MSG_STEPPER_TO_HIGH "Steprate to high : "
+	#define MSG_STEPPER_TO_HIGH "Steprate too high : "
 	#define MSG_ENDSTOPS_HIT "endstops hit: "
 	#define MSG_ERR_COLD_EXTRUDE_STOP " cold extrusion prevented"
 	#define MSG_ERR_LONG_EXTRUDE_STOP " too long extrusion prevented"

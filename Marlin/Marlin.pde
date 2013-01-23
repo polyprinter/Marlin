@@ -1043,24 +1043,27 @@ void process_commands()
           _and_ until TEMP_RESIDENCY_TIME hasn't passed since we reached it */
         while((residencyStart == -1) ||
               (residencyStart >= 0 && (((unsigned int) (millis() - residencyStart)) < (TEMP_RESIDENCY_TIME * 1000UL))) ) {
+			 if ( isCoolingHotend( tmp_extruder ) && !CooldownWait ) break; // don't wait for cooling if not supposed to
       #else
-        while ( target_direction ? (isHeatingHotend(tmp_extruder)) : (isCoolingHotend(tmp_extruder)&&(CooldownNoWait==false)) ) {
+        while ( target_direction ? (isHeatingHotend(tmp_extruder)) : ( isCoolingHotend( tmp_extruder ) && CooldownWait ) ) {
       #endif //TEMP_RESIDENCY_TIME
+			  // Print Temp Reading and remaining time every 1 second while heating up/cooling down
           if( (millis() - codenum) > 1000UL )
-          { //Print Temp Reading and remaining time every 1 second while heating up/cooling down
+          { 
             SERIAL_PROTOCOLPGM("T:");
             SERIAL_PROTOCOL_F(degHotend(tmp_extruder),1); 
             SERIAL_PROTOCOLPGM(" E:");
             SERIAL_PROTOCOL( (int)tmp_extruder ); 
             #ifdef TEMP_RESIDENCY_TIME
               SERIAL_PROTOCOLPGM(" W:");
-              if(residencyStart > -1)
+              if ( residencyStart > -1 )
               {
                  codenum = ((TEMP_RESIDENCY_TIME * 1000UL) - (millis() - residencyStart)) / 1000UL;
                  SERIAL_PROTOCOLLN( codenum );
               }
               else 
               {
+						// waiting to hit the target temperature
                  SERIAL_PROTOCOLLN( "?" );
               }
             #else
