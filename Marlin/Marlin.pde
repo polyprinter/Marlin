@@ -204,7 +204,6 @@ static uint8_t tmp_extruder;
 
 
 bool Stopped=false;
-bool Paused = false;  // if true, printer is temperarily paused and may be asked to continue from the current state
 
 #ifdef VARY_ACCEL_WITH_Z
 float acceleration_taper_height = Z_MAX_POS;
@@ -215,6 +214,15 @@ float acceleration_taper_y = 1.0f;
 //===========================================================================
 //=============================ROUTINES=============================
 //===========================================================================
+
+// this must be called frequently to maintain temperature management and other idle-time features, from the main thread.
+void DoBackgroundProcessingTick() {
+	// default acivities that are normally kept active during any lengthy delays in the main thread
+	manage_heater(); 
+	manage_inactivity(); 
+	LCD_STATUS;
+}
+
 
 void get_arc_coordinates();
 bool setTargetedHotend(int code);
@@ -409,11 +417,11 @@ void loop()
     buflen = (buflen-1);
     bufindr = (bufindr + 1)%BUFSIZE;
   }
-  //check heater every n milliseconds
-  manage_heater();
-  manage_inactivity();
+
+  // check heater every n milliseconds
+  DoBackgroundProcessingTick();
+
   checkHitEndstops();
-  LCD_STATUS;
 }
 
 void get_command() 
@@ -698,9 +706,7 @@ void process_commands()
       codenum += millis();  // keep track of when we started waiting
       previous_millis_cmd = millis();
       while(millis()  < codenum ){
-        manage_heater();
-        manage_inactivity();
-		LCD_STATUS;
+		  DoBackgroundProcessingTick();
       }
       break;
       #ifdef FWRETRACT  
@@ -865,15 +871,11 @@ void process_commands()
       if (codenum > 0){
         codenum += millis();  // keep track of when we started waiting
         while(millis()  < codenum && !CLICKED){
-          manage_heater();
-          manage_inactivity();
-		  LCD_STATUS;
-		}
+			DoBackgroundProcessingTick();
+		  }
       }else{
         while(!CLICKED) {
-          manage_heater();
-          manage_inactivity();
-		  LCD_STATUS;
+			DoBackgroundProcessingTick();
 		}
 	  }
     }
@@ -1094,9 +1096,9 @@ void process_commands()
             #endif
             codenum = millis();
           }
-          manage_heater();
-          manage_inactivity();
-          LCD_STATUS;
+
+			DoBackgroundProcessingTick();
+
         #ifdef TEMP_RESIDENCY_TIME
             /* start/restart the TEMP_RESIDENCY_TIME timer whenever we reach target temp for the first time
               or when current temp falls outside the hysteresis after target temp was reached */
@@ -1132,9 +1134,7 @@ void process_commands()
             SERIAL_PROTOCOLLN(""); 
             codenum = millis(); 
           }
-          manage_heater();
-          manage_inactivity();
-          LCD_STATUS;
+			DoBackgroundProcessingTick();
         }
         LCD_MESSAGEPGM(MSG_BED_DONE);
         previous_millis_cmd = millis();
@@ -1725,11 +1725,22 @@ void prepare_move()
   previous_millis_cmd = millis();  
   
   // Do not use feedmultiply for E or Z only moves
-  if( (current_position[X_AXIS] == destination [X_AXIS]) && (current_position[Y_AXIS] == destination [Y_AXIS])) {
+  if ( (current_position[X_AXIS] == destination [X_AXIS]) && (current_position[Y_AXIS] == destination [Y_AXIS])) {
       plan_buffer_line(destination[X_AXIS], destination[Y_AXIS], destination[Z_AXIS], destination[E_AXIS], feedrate/60, active_extruder);
   }
   else {
-	plan_buffer_line(destination[X_AXIS], destination[Y_AXIS], destination[Z_AXIS], destination[E_AXIS], feedrate*feedmultiply/60/100.0, active_extruder);
+		// it's an XY move, possibly extruding too
+		// This is the first point where we can decide whether it is necessary to Pause. Ideally we should only pause if one or more buffered or executing actions
+		// is an actual moving extrusion. (non-extrusions don't require filament, extrusion-only is not printing and may be desireable feeding operations).
+		// But we won't know when an instruction like this is finished, so we can't necessarily just set a flag.
+	   // NOTE: we may wish to do a separate special check for Manual Pause activation, honored regardless of whether actual printing is happening
+		if ( current_position[E_AXIS] < destination [E_AXIS] ) {
+		  // this is a pausable point. Positive extrusion with some movement.
+			// We must wait and not yet plan the line.
+		  CheckPauseAndWaitUntilCleared(); // waits until the pause is cleared and printing can resume. Ensures that temperature management is still performed while waiting.
+		}
+
+		plan_buffer_line(destination[X_AXIS], destination[Y_AXIS], destination[Z_AXIS], destination[E_AXIS], feedrate*feedmultiply/60/100.0, active_extruder);
   }
 
   for(int8_t i=0; i < NUM_AXIS; i++) {
@@ -1787,50 +1798,117 @@ void controllerFan()
 #endif
 
 #ifdef  PAUSE_PIN   // if the pause pin is defined
+
+bool FilamentProblem() {
+	return READ(PAUSE_PIN) == PAUSE_ACTIVE;
+}
+
 bool PauseActive() {
-	return ( READ(PAUSE_PIN) == PAUSE_ACTIVE 
+	return ( FilamentProblem() 
  #ifdef MANUAL_PAUSE_PIN
 		 || READ( MANUALPAUSE_PIN ) == MANUAL_PAUSE_ACTIVE 
  #endif
 		  );
 }
-#endif
 
-void manage_inactivity() 
-{ 
-  if( (millis() - previous_millis_cmd) >  max_inactive_time ) 
-    if(max_inactive_time) 
-      kill(); 
-  if(stepper_inactive_time)  {
-    if( (millis() - previous_millis_cmd) >  stepper_inactive_time ) 
-    {
-      if(blocks_queued() == false) {
-        disable_x();
-        disable_y();
-        disable_z();
-        disable_e0();
-        disable_e1();
-        disable_e2();
-      }
-    }
-  }
-  #if( KILL_PIN>-1 )
-    if( READ(KILL_PIN) == KILL_PIN_ACTIVE )
-      kill();
-  #endif
-  #if defined( PAUSE_PIN )  // if the pause pin is defined
-		const int PAUSE_DEBOUNCE_LENGTH_MS = 50;
-	 if ( PauseActive() ) {
-      pause();
+enum PAUSE_STATE {
+	PAUSE_STATE_INACTIVE,
+	PAUSE_STATE_WAIT_FOR_DEACTIVATION,   // waiting for the original activation signal or condition to go away
+	PAUSE_STATE_WAIT_FOR_RESUME,			 // waiting for the conditions that allow resumption
 
-		// unfortunately, we can't resume if we keep processing commands, 
-		// and if we don't process commands, we can't see any M-code coming in saying to resume.
+};
 
-		// no matter what the original Pause activation was caused by, we must go through the process of ensuring that it has gone away before we 
-		// even bother considering whether to Resume or not.
+int pause_state = PAUSE_STATE_INACTIVE;
+int wasPauseWarned = false;
+
+const int PAUSE_DEBOUNCE_LENGTH_MS = 50;
+
+bool IsPaused() { return pause_state != PAUSE_STATE_INACTIVE; }
+
+// this can be called to ensure that an impending Pause condition exists.
+// we might have this on some timer so that we get an occasional warning.
+void RewarnPause() {
+	wasPauseWarned = false;
+}
+
+// warn the user that if actual printing is attempted, a Pause wil be entered
+// always returns quickly (may pause short time for debounce)
+void CheckWarnFilament() 
+{
+	if ( IsPaused() ) return;  // just in case this gets called from the idle function while paused.
+
+	if ( FilamentProblem() ) {
+		if ( ! wasPauseWarned ) {
+			wasPauseWarned = true;
+		  SERIAL_ECHOLNPGM("Warning: Check filament.");
+		  LCD_MESSAGEPGM("Check Filament.");
+			// We need a full debounce cycle on it, to ensure that we count operational occurrences correctly.
+			_delay_ms( PAUSE_DEBOUNCE_LENGTH_MS );
+		}
+
+	}
+	else {
+		if ( wasPauseWarned ) {
+		  wasPauseWarned = false;
+		  SERIAL_ECHOLNPGM("Filament OK.");
+		  LCD_MESSAGEPGM("Filament OK.");
+			// We need a full debounce cycle on it, to ensure that we count operational occurrences correctly.
+			_delay_ms( PAUSE_DEBOUNCE_LENGTH_MS );
+		}
+	}
+
+ }
+
+// enter the paused state, telling the user
+void pause()
+{
+	if ( ! IsPaused() ) {
+	  pause_state = PAUSE_STATE_WAIT_FOR_DEACTIVATION;  // set the state
+
+	  SERIAL_ERROR_START;
+	  SERIAL_ERRORLNPGM("Paused, WAITING. Careful - will resume immediately upon release.");
+	  LCD_MESSAGEPGM("PAUSED. Waiting.");
+	  Stopped_gcode_LastN = gcode_LastN; // Save last g_code for restart
 		// We need a full debounce cycle on it, to ensure that we count operational occurrences correctly.
 		_delay_ms( PAUSE_DEBOUNCE_LENGTH_MS );
-		// wait for the first activation to be finished
+	}
+
+ }
+
+// leave the paused state, telling the user
+void resume()
+{
+	if ( IsPaused() ) {
+	  pause_state = PAUSE_STATE_INACTIVE;
+	  CheckWarnFilament(); // give the un-warning message first
+	  SERIAL_ECHOLNPGM("Resuming.");
+	  LCD_MESSAGEPGM("Resuming.");
+	  gcode_LastN = gcode_LastN; 
+	}
+
+}
+
+// re-entrant (state-driven) function that may be called repeatedly to check for pause handling.
+// It is allowed to stall for debounce time, but not for extremely long periods (because temperature handling must continue while paused).
+// It never initiates a Pause, it only manages it once initiated.
+void HandlePause() {
+	// no matter what the original Pause activation was caused by, we must go through the process of ensuring that it has gone away before we 
+	// even bother considering whether to Resume or not.
+	switch ( pause_state ) {
+	case PAUSE_STATE_INACTIVE : return; break; // nothing to do
+	case PAUSE_STATE_WAIT_FOR_DEACTIVATION :
+		// stay in this paused state until the conditions go away (either a button push ending, or the filament to be restored, or both)
+		previous_millis_cmd = millis();  // we don't want it to look like "inactivity"
+		if ( ! PauseActive() ) {
+			// they went away - change state
+			resume();
+		}
+		break;
+	}
+}
+
+#ifdef FUTURE // when we have a butt, rework this for state driven code
+// wait for the first activation to be finished
 		while ( PauseActive() ); // have to wait for both Pause-causing conditions to go away
 		// now debounce again...
 		_delay_ms( PAUSE_DEBOUNCE_LENGTH_MS );
@@ -1872,6 +1950,68 @@ void manage_inactivity()
 		resume();
 	 }
   #endif
+#endif
+
+// this normally only needs to be checked when actively moving and extruding i.e. actual printing
+// (though perhaps a manual pause should be honored instantly at any time?)
+// This function MUSt return immediately. (In Pause, all temperature handling must continue.)
+// THis may be called from anywhere, but usually only from somewhere that has determined that active movement with extrusion is happening,
+// which is when a filament switch should matter.
+void CheckPause() {
+	if ( PauseActive() ) {
+      pause();
+	}
+}
+
+
+// does not return until the Pause has ended.
+// maintains temperature management and idle time functions
+void PauseUntilCleared() {
+	while ( IsPaused() ) {
+		HandlePause(); // manage pause state activity and transitions
+		DoBackgroundProcessingTick();
+	}
+}
+
+
+// Unfortunately, we can't resume if we keep processing commands, 
+// and if we don't process commands, we can't see any M-code coming in saying to resume.
+// so we must stall.
+
+// Checks for the need to Pause, and if so, Pauses and does not return until the Pause has ended.
+// maintains temperature management and idle time functions
+void CheckPauseAndWaitUntilCleared() {
+	CheckPause();
+	PauseUntilCleared();
+}
+
+// called periodically
+void manage_inactivity() 
+{ 
+	CheckWarnFilament();
+
+	if ( (millis() - previous_millis_cmd) >  max_inactive_time ) 
+	 if (max_inactive_time) 
+		kill(); 
+
+	if (stepper_inactive_time)  {
+	 if ( (millis() - previous_millis_cmd) >  stepper_inactive_time ) 
+	 {
+		if (blocks_queued() == false) {
+		  disable_x();
+		  disable_y();
+		  disable_z();
+		  disable_e0();
+		  disable_e1();
+		  disable_e2();
+		}
+	 }
+	}
+
+  #if( KILL_PIN>-1 )
+    if( READ(KILL_PIN) == KILL_PIN_ACTIVE )
+      kill();
+  #endif
 
   #ifdef CONTROLLERFAN_PIN
     controllerFan(); //Check if fan should be turned on to cool stepper drivers down
@@ -1897,32 +2037,6 @@ void manage_inactivity()
   #endif
   check_axes_activity();
 }
-
-bool IsPaused() { return Paused; };
-
-void pause()
-{
-	if ( ! IsPaused() ) {
-	  SERIAL_ERROR_START;
-	  SERIAL_ERRORLNPGM("Paused, WAITING. Careful - will resume immediately upon release.");
-	  LCD_MESSAGEPGM("PAUSED. Waiting.");
-	  Paused = true;
-	  Stopped_gcode_LastN = gcode_LastN; // Save last g_code for restart
-	}
-
- }
-
-void resume()
-{
-	if ( IsPaused() ) {
-	  SERIAL_ECHOLNPGM("Resuming.");
-	  LCD_MESSAGEPGM("Resuming.");
-	  Paused = false;
-	  gcode_LastN = gcode_LastN; 
-	}
-
- }
-
 
 void kill()
 {

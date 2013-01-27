@@ -173,6 +173,10 @@ enum AxisEnum {X_AXIS=0, Y_AXIS=1, Z_AXIS=2, E_AXIS=3};
 void FlushSerialRequestResend();
 void ClearToSend();
 
+void CheckPauseAndWaitUntilCleared();
+void CheckPause();
+void CheckWarnFilament();
+void PauseUntilCleared();
 void get_coordinates();
 void prepare_move();
 void kill();
@@ -182,6 +186,8 @@ void Stop();
 
 bool IsStopped();
 bool IsPaused();
+
+void DoBackgroundProcessingTick();  // this must be called frequently to maintain temperature management and other idle-time features, from the main thread.
 
 void enquecommand(const char *cmd); //put an ascii command at the end of the current buffer.
 void prepare_arc_move(char isclockwise);
