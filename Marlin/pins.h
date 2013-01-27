@@ -969,7 +969,17 @@
 #define SDSS                26
 #define LED_PIN            -1
 #define PS_ON_PIN          -1
-#define KILL_PIN           20    // use old "Y" switch input as E-Stop for when carriage nut gets driven out of contact by accident. Can happen when printing, or when homing Z.
+#define KILL_PIN				20 // use old "Y" switch input as Kill for when carriage nut gets driven out of contact by accident. Can happen when printing, or when homing Z.
+
+// New pin: hardware input to temporarily pause printing until the condition is removed or a resume indication is activated to resume from that point. All temps retained active.
+// Operation will NOT automatically resume if the pin state changes back to inactive (high).
+// The "expansion header" on the Printrboard has a few regular IO pins available.
+
+// Digital pin 4 is the closest to the GND on the expansion header between the inductor and the debug shunt pins. GND is closest to the inductor, nearest the "L1" marking.
+// It's normally easiest to simply ground the pause pin when NOT pausing. An open circuit fault will then cause a pause.
+#define PAUSE_PIN           4    // define this pin in order to have a hard-wired Pause sensor condition or button.
+//#define MANUAL_PAUSE_PIN	 6  // not recommended to also be the PAUSE_PIN unless you just want to pause while holding it, or it's a push-on, push-off switch (which then makes for an odd Resume action if pause was initiated by the filament switch
+//#define MANUAL_RESUME_PIN	-1  // define this if a separate Resume signal will be used that does not also act as a Pause signal pin.
 
 #ifndef SDSUPPORT
 // these pins are defined in the SD library if building with SD support
@@ -1292,5 +1302,6 @@
 #define SENSITIVE_PINS {0, 1, X_STEP_PIN, X_DIR_PIN, X_ENABLE_PIN, X_MIN_PIN, X_MAX_PIN, Y_STEP_PIN, Y_DIR_PIN, Y_ENABLE_PIN, Y_MIN_PIN, Y_MAX_PIN, Z_STEP_PIN, Z_DIR_PIN, Z_ENABLE_PIN, Z_MIN_PIN, Z_MAX_PIN, LED_PIN, PS_ON_PIN, \
                         HEATER_BED_PIN, FAN_PIN,                  \
                         _E0_PINS _E1_PINS _E2_PINS             \
+								KILL_PIN, \
                         TEMP_0_PIN, TEMP_1_PIN, TEMP_2_PIN, TEMP_BED_PIN }
 #endif

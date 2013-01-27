@@ -222,6 +222,15 @@ const bool Z_ENDSTOPS_INVERTING = false; // set to true to invert the logic of t
 #define INVERT_E1_DIR false    // for direct drive extruder v9 set to true, for geared extruder set to false
 #define INVERT_E2_DIR false   // for direct drive extruder v9 set to true, for geared extruder set to false
 
+// on the Printrboard, pin 20 ("Y" endstop) will prevent bootup if held to ground. So we use it for an emergency stop
+// where the circuit is open unless the emergency occurs. That allows the board to boot up unless the e-stop is actually active at that time.
+// So when using the secondary Z "endstop" safety switch, the switch must be wired such that it is an open circuit when all is well, and closes when the nut is pulled down too far.
+#define KILL_PIN_ACTIVE 0		// 0 if becomes active when pulled down, 1 if becomes active when not pulled down to ground
+#define PAUSE_ACTIVE 1			// if PAUSE_PIN defined, it will be active (pausing) when at this level. If 1, means is pulled down to 0 when printing normally (not pausing).
+#define RESUME_ACTIVE PAUSE_ACTIVE  // usually going to operate identically, so this is a good default
+#define MANUAL_PAUSE_ACTIVE PAUSE_ACTIVE
+#define MANUAL_RESUME_ACTIVE PAUSE_ACTIVE
+
 // ENDSTOP SETTINGS:
 // Sets direction of endstops when homing; 1=MAX, -1=MIN
 #define X_HOME_DIR -1

@@ -204,6 +204,7 @@ static uint8_t tmp_extruder;
 
 
 bool Stopped=false;
+bool Paused = false;  // if true, printer is temperarily paused and may be asked to continue from the current state
 
 #ifdef VARY_ACCEL_WITH_Z
 float acceleration_taper_height = Z_MAX_POS;
@@ -267,7 +268,23 @@ void setup_killpin()
     WRITE(KILL_PIN,HIGH);
   #endif
 }
-    
+   
+void setup_pausepin()
+{
+#if ( PAUSE_PIN > -1 )
+    pinMode( PAUSE_PIN, INPUT );
+    WRITE( PAUSE_PIN, HIGH );
+#endif
+#ifdef  MANUAL_PAUSE_PIN
+	 pinMode( MANUAL_PAUSE_PIN, INPUT );
+    WRITE( MANUAL_PAUSE_PIN, HIGH );
+#endif
+#ifdef  MANUAL_RESUME_PIN
+	 pinMode( MANUAL_RESUME_PIN, INPUT );
+    WRITE( MANUAL_RESUME_PIN, HIGH );
+#endif
+}
+
 void setup_photpin()
 {
   #ifdef PHOTOGRAPH_PIN
@@ -302,6 +319,8 @@ void setup()
 { 
   setup_killpin(); 
   setup_powerhold();
+  setup_pausepin();
+
   MYSERIAL.begin(BAUDRATE);
   SERIAL_PROTOCOLLNPGM("start");
   SERIAL_ECHO_START;
@@ -356,12 +375,15 @@ void setup()
 
 void loop()
 {
-  if(buflen < (BUFSIZE-1))
-    get_command();
+	if ( buflen < (BUFSIZE-1) ) {
+		get_command();
+	}
+
   #ifdef SDSUPPORT
   card.checkautostart(false);
   #endif
-  if(buflen)
+
+  if ( buflen )
   {
     #ifdef SDSUPPORT
       if(card.saving)
@@ -953,6 +975,7 @@ void process_commands()
         if (code_seen('P') && pin_status >= 0 && pin_status <= 255)
         {
           int pin_number = code_value();
+			 // prevent pins on the sensitive_pins list from being manipulated by GCODE
           for(int8_t i = 0; i < (int8_t)sizeof(sensitive_pins); i++)
           {
             if (sensitive_pins[i] == pin_number)
@@ -1763,6 +1786,16 @@ void controllerFan()
 }
 #endif
 
+#ifdef  PAUSE_PIN   // if the pause pin is defined
+bool PauseActive() {
+	return ( READ(PAUSE_PIN) == PAUSE_ACTIVE 
+ #ifdef MANUAL_PAUSE_PIN
+		 || READ( MANUALPAUSE_PIN ) == MANUAL_PAUSE_ACTIVE 
+ #endif
+		  );
+}
+#endif
+
 void manage_inactivity() 
 { 
   if( (millis() - previous_millis_cmd) >  max_inactive_time ) 
@@ -1782,9 +1815,64 @@ void manage_inactivity()
     }
   }
   #if( KILL_PIN>-1 )
-    if( 0 == READ(KILL_PIN) )
+    if( READ(KILL_PIN) == KILL_PIN_ACTIVE )
       kill();
   #endif
+  #if defined( PAUSE_PIN )  // if the pause pin is defined
+		const int PAUSE_DEBOUNCE_LENGTH_MS = 50;
+	 if ( PauseActive() ) {
+      pause();
+
+		// unfortunately, we can't resume if we keep processing commands, 
+		// and if we don't process commands, we can't see any M-code coming in saying to resume.
+
+		// no matter what the original Pause activation was caused by, we must go through the process of ensuring that it has gone away before we 
+		// even bother considering whether to Resume or not.
+		// We need a full debounce cycle on it, to ensure that we count operational occurrences correctly.
+		_delay_ms( PAUSE_DEBOUNCE_LENGTH_MS );
+		// wait for the first activation to be finished
+		while ( PauseActive() ); // have to wait for both Pause-causing conditions to go away
+		// now debounce again...
+		_delay_ms( PAUSE_DEBOUNCE_LENGTH_MS );
+		// the initial condition has gone away.
+		// Now we are actually waiting for the Resume action
+
+		// Should we Resume?
+
+   #ifdef MANUAL_RESUME_PIN
+		// there's a Resume pin that explicitly indicates we should resume. It may also be the same pin (button) used 
+		// to manually initiate a Pause.
+    #if ( MANUAL_RESUME_PIN == MANUAL_PAUSE_PIN )  
+		// it's used as a toggle - pressed once to pause, another time to resume.
+
+		while ( READ(MANUAL_PAUSE_PIN) != MANUAL_PAUSE_ACTIVE ); 
+		// debounce so that we don't immediately think it's finished this activation 
+		_delay_ms( PAUSE_DEBOUNCE_LENGTH_MS );
+		// wait for the second activation to be finished
+		while ( READ(MANUAL_PAUSE_PIN) == MANUAL_PAUSE_ACTIVE ); 
+		// one last debounce so that we don't immediately think we're supposed to pause again if there's a bounce
+		_delay_ms( PAUSE_DEBOUNCE_LENGTH_MS );
+
+	 #else
+		// the resume pin is only used as a resume, never a pause indication. We just need to see any valid activity on it.
+		while ( READ(MANUAL_RESUME_PIN) != MANUAL_RESUME_ACTIVE ); // wait for the resume pin to become active 
+	 #endif
+
+	#else
+		// We're stuck with an immediate resumption upon the condition going away, which is not the safest.
+		// Therefore Pause() should NEVER be used for SAFETY stops (E-stops). 
+		// Should also not be used on machines that could cause injury if suddenly started.
+
+		// Since the absence of the active state on the pause pin is used to resume, we must include some debounce time from the initial
+		// action, just in case we happened to catch it just after it first triggered, and is now still
+		// noisy.
+
+		// We simply resume, because the initial Pause condition has been cleared
+	#endif
+		resume();
+	 }
+  #endif
+
   #ifdef CONTROLLERFAN_PIN
     controllerFan(); //Check if fan should be turned on to cool stepper drivers down
   #endif
@@ -1810,6 +1898,32 @@ void manage_inactivity()
   check_axes_activity();
 }
 
+bool IsPaused() { return Paused; };
+
+void pause()
+{
+	if ( ! IsPaused() ) {
+	  SERIAL_ERROR_START;
+	  SERIAL_ERRORLNPGM("Paused, WAITING. Careful - will resume immediately upon release.");
+	  LCD_MESSAGEPGM("PAUSED. Waiting.");
+	  Paused = true;
+	  Stopped_gcode_LastN = gcode_LastN; // Save last g_code for restart
+	}
+
+ }
+
+void resume()
+{
+	if ( IsPaused() ) {
+	  SERIAL_ECHOLNPGM("Resuming.");
+	  LCD_MESSAGEPGM("Resuming.");
+	  Paused = false;
+	  gcode_LastN = gcode_LastN; 
+	}
+
+ }
+
+
 void kill()
 {
   SERIAL_ERROR_START;
@@ -1833,10 +1947,11 @@ void kill()
   while(1); // Wait for reset
 #endif
 }
+
 void Stop()
 {
   disable_heater();
-  if(Stopped == false) {
+  if ( Stopped == false ) {
     Stopped = true;
     Stopped_gcode_LastN = gcode_LastN; // Save last g_code for restart
     SERIAL_ERROR_START;
