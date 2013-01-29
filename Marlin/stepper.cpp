@@ -49,7 +49,7 @@ static long counter_x,       // Counter variables for the Bresenham line tracer
             counter_z,       
             counter_e;
 volatile static unsigned long step_events_completed; // The number of step events executed in the current block
-#ifdef ADVANCE
+#ifdef EXTRUDER_ADVANCE
   static long advance_rate, unadvance_rate, advance, final_advance = 0;
   static long old_advance = 0;
 #endif
@@ -282,7 +282,7 @@ FORCE_INLINE unsigned short calc_timer(unsigned short step_rate) {
 // Initializes the trapezoid generator from the current block. Called whenever a new 
 // block begins.
 FORCE_INLINE void trapezoid_generator_reset() {
-  #ifdef ADVANCE
+  #ifdef EXTRUDER_ADVANCE
     advance        = current_block->initial_advance;
 	 advance_rate   = current_block->advance_rate;
 	 unadvance_rate = current_block->unadvance_rate;
@@ -310,9 +310,7 @@ FORCE_INLINE void trapezoid_generator_reset() {
     
 }
 
-#ifdef ADVANCE
-#define DYNAMIC_ADVANCE_OPTION
-
+#ifdef EXTRUDER_ADVANCE
 extern float extruder_advance_k;
 #ifndef ADVANCE_HAS_OWN_INTERRUPT_SERVICE_ROUTINE
 void HandleExtruderAdvance();
@@ -344,7 +342,7 @@ ISR(TIMER1_COMPA_vect)
         }
       #endif
       
-//      #ifdef ADVANCE
+//      #ifdef EXTRUDER_ADVANCE
 //      e_steps[current_block->active_extruder] = 0;
 //      #endif
     } 
@@ -511,15 +509,15 @@ ISR(TIMER1_COMPA_vect)
 		 }
 #else
       if ((out_bits & (1<<E_AXIS)) != 0) {  // -direction
-#ifndef ADVANCE
+#ifndef EXTRUDER_ADVANCE
        REV_E_DIR();
-#endif //!ADVANCE
+#endif //!EXTRUDER_ADVANCE
         count_direction[E_AXIS]=-1;
       }
       else { // +direction
-#ifndef ADVANCE
+#ifndef EXTRUDER_ADVANCE
        NORM_E_DIR();
-#endif //!ADVANCE
+#endif //!EXTRUDER_ADVANCE
        count_direction[E_AXIS]=1;
       }
     
@@ -627,16 +625,16 @@ ISR(TIMER1_COMPA_vect)
 			    WRITE_E_STEP(INVERT_E_STEP_PIN);
 			}
 #else
-#ifndef ADVANCE  //!ADVANCE
+#ifndef EXTRUDER_ADVANCE  //!EXTRUDER_ADVANCE
         WRITE_E_STEP(!INVERT_E_STEP_PIN);
-#endif           //!ADVANCE
+#endif           //!EXTRUDER_ADVANCE
         counter_e -= current_block->step_event_count;
 		 count_position[E_AXIS] += count_direction[E_AXIS];
-#ifdef ADVANCE
+#ifdef EXTRUDER_ADVANCE
 			 e_steps[current_block->active_extruder] += count_direction[E_AXIS];
-#else  //!ADVANCE
+#else  //!EXTRUDER_ADVANCE
           WRITE_E_STEP(INVERT_E_STEP_PIN);
-#endif //!ADVANCE
+#endif //!EXTRUDER_ADVANCE
 #endif
 	  }
 
@@ -660,10 +658,10 @@ ISR(TIMER1_COMPA_vect)
       timer = calc_timer(acc_step_rate);
       OCR1A = timer;
       acceleration_time += timer;
-      #ifdef ADVANCE
-#ifdef DYNAMIC_ADVANCE_OPTION
+#ifdef EXTRUDER_ADVANCE
+ #ifdef DYNAMIC_ADVANCE_OPTION
 		if ( doAdvance ) {
-#endif
+ #endif
 			// adjust advance based on the rate of change of advance that was set up
         advance += loops_completed * advance_rate;
 
@@ -671,10 +669,10 @@ ISR(TIMER1_COMPA_vect)
         // Do E steps + advance steps
         e_steps[current_block->active_extruder] += ((advance >>8) - old_advance);
         old_advance = advance >>8;  
-#ifdef DYNAMIC_ADVANCE_OPTION
+ #ifdef DYNAMIC_ADVANCE_OPTION
 		}
+ #endif
 #endif
-      #endif
     } 
     else if (step_events_completed > (unsigned long int)current_block->decelerate_after) {   
       MultiU24X24toH16(step_rate, deceleration_time, current_block->acceleration_rate);
@@ -694,7 +692,7 @@ ISR(TIMER1_COMPA_vect)
       timer = calc_timer(step_rate);
       OCR1A = timer;
       deceleration_time += timer;
-      #ifdef ADVANCE
+      #ifdef EXTRUDER_ADVANCE
 #ifdef DYNAMIC_ADVANCE_OPTION
 		if ( doAdvance ) {
 #endif
@@ -706,7 +704,7 @@ ISR(TIMER1_COMPA_vect)
 #ifdef DYNAMIC_ADVANCE_OPTION
 			}
 #endif
-      #endif //ADVANCE
+      #endif //EXTRUDER_ADVANCE
     }
     else {
       OCR1A = OCR1A_nominal;
@@ -719,7 +717,7 @@ ISR(TIMER1_COMPA_vect)
     }   
   } 
 
-#ifdef ADVANCE
+#ifdef EXTRUDER_ADVANCE
 #ifndef ADVANCE_HAS_OWN_INTERRUPT_SERVICE_ROUTINE
 #ifdef DYNAMIC_ADVANCE_OPTION
   if ( doAdvance ) {
@@ -732,7 +730,7 @@ ISR(TIMER1_COMPA_vect)
 #endif
 }
 
-#ifdef ADVANCE
+#ifdef EXTRUDER_ADVANCE
  #ifdef ADVANCE_HAS_OWN_INTERRUPT_SERVICE_ROUTINE
   unsigned char old_OCR0A;
   // Timer interrupt for E. e_steps is set in the main routine;
@@ -799,7 +797,7 @@ void HandleExtruderAdvance()
  #endif
     }
   }
-#endif // ADVANCE
+#endif // EXTRUDER_ADVANCE
 
 void st_init()
 {
@@ -967,7 +965,7 @@ void st_init()
   TCNT1 = 0;
   ENABLE_STEPPER_DRIVER_INTERRUPT();  
 
-#ifdef ADVANCE
+#ifdef EXTRUDER_ADVANCE
   e_steps[0] = 0;
   e_steps[1] = 0;
   e_steps[2] = 0;
@@ -979,7 +977,7 @@ void st_init()
   #endif  
     TIMSK0 |= (1<<OCIE0A);
  #endif // ADVANCE_HAS_OWN_INTERRUPT_SERVICE_ROUTINE
-#endif //ADVANCE
+#endif //EXTRUDER_ADVANCE
   
   enable_endstops(true); // Start with endstops active. After homing they can be disabled
   sei();

@@ -134,7 +134,7 @@
 //===========================================================================
 //=============================imported variables============================
 //===========================================================================
-#ifdef ADVANCE
+#ifdef EXTRUDER_ADVANCE
 extern float extruder_advance_k;
 #endif
 
@@ -1490,7 +1490,7 @@ void process_commands()
       PID_autotune(temp, e, c);
     }
     break;
-	 #ifdef ADVANCE
+	 #ifdef EXTRUDER_ADVANCE
     case 305: // M305 AadvanceFactor*1000 e.g. 100 for a value of .100
       {
         if(code_seen('A')) extruder_advance_k = code_value() / 1000;

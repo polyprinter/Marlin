@@ -75,7 +75,7 @@ float max_e_jerk;
 float mintravelfeedrate;
 unsigned long axis_steps_per_sqr_second[NUM_AXIS];
 
-#ifdef ADVANCE
+#ifdef EXTRUDER_ADVANCE
 float extruder_advance_k; // defaulted elsewhere
 #endif
 
@@ -192,7 +192,7 @@ void calculate_trapezoid_for_block(block_t *block, float entry_factor, float exi
   int32_t decelerate_steps =
     floor(estimate_acceleration_distance(block->nominal_rate, block->final_rate, -acceleration));
 
-#ifdef ADVANCE
+#ifdef EXTRUDER_ADVANCE
  #ifdef ADVANCE_WITH_SQUARE_LAW
   long init_advance = block->advance*entry_factor*entry_factor; 
   long fin_advance  = block->advance*exit_factor*exit_factor;
@@ -203,7 +203,7 @@ void calculate_trapezoid_for_block(block_t *block, float entry_factor, float exi
  #endif
   long nominal_accel_steps = accelerate_steps;
   long nominal_decel_steps = decelerate_steps;
-#endif // ADVANCE
+#endif // EXTRUDER_ADVANCE
 
   // Calculate the size of Plateau of Nominal Rate.
   int32_t plateau_steps = block->step_event_count - accelerate_steps-decelerate_steps;
@@ -227,14 +227,14 @@ void calculate_trapezoid_for_block(block_t *block, float entry_factor, float exi
     block->decelerate_after = accelerate_steps + plateau_steps;
     block->initial_rate = initial_rate;
     block->final_rate   = final_rate;
-#ifdef ADVANCE
+#ifdef EXTRUDER_ADVANCE
     block->initial_advance = init_advance;
     block->final_advance   = fin_advance;
 	 // block.advance here is what it would be if full velocity is reached, so we use the nominal steps for each phase, and only as much of 
 	 // each will be applied as there is time and distance for.
 	 block->advance_rate   = ( block->advance - init_advance ) / (float)nominal_accel_steps;		// spread the advance evenly across the entire acceleration distance
 	 block->unadvance_rate = ( block->advance - fin_advance  ) / (float)nominal_decel_steps;		// spread the advance evenly across the entire acceleration distance
-#endif //ADVANCE
+#endif //EXTRUDER_ADVANCE
   }
   CRITICAL_SECTION_END;
 }                    
@@ -809,7 +809,7 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
   previous_nominal_speed = block->nominal_speed;
 
 
-#ifdef ADVANCE
+#ifdef EXTRUDER_ADVANCE
   block->advance_rate   = 0;
   block->unadvance_rate = 0;
 
@@ -819,7 +819,7 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
   }
   else {
 	 //float advance = (STEPS_PER_CUBIC_MM_E * EXTRUDER_ADVANCE_K) * (current_speed[E_AXIS] * current_speed[E_AXIS] * EXTRUSION_AREA * EXTRUSION_AREA ) * 256;
- #ifdef ADVANCE_WITH_SQARE_LAW
+ #ifdef ADVANCE_WITH_SQUARE_LAW
 	 float advance_stepsx256 = (STEPS_PER_CUBIC_MM_E * extruder_advance_k) * ( current_speed[E_AXIS] * current_speed[E_AXIS] * EXTRUSION_AREA ) * 256;
  #else
 	 // it seems to over-advance if we use the square of the speed - higher speeds needed lower constants, by a large factor
@@ -843,7 +843,7 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
    SERIAL_ECHOPGM("advance rate :");
    SERIAL_ECHOLN(block->advance_rate/256.0);
    */
-#endif // ADVANCE
+#endif // EXTRUDER_ADVANCE
 
   calculate_trapezoid_for_block(block, block->entry_speed/block->nominal_speed,
   safe_speed/block->nominal_speed);

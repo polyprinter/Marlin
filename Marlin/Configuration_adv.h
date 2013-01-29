@@ -200,14 +200,14 @@
 // so: v ^ 2 is proportional to number of steps we advance the extruder
 // causes rough behavior - not ready yet #define ADVANCE
 
-#ifdef ADVANCE
+#ifdef EXTRUDER_ADVANCE
   #define DEFAULT_EXTRUDER_ADVANCE_K .035
 
   #define D_FILAMENT 1.8	
   #define EXTRUSION_AREA (0.25 * D_FILAMENT * D_FILAMENT * 3.14159)
   #define STEPS_PER_CUBIC_MM_E (axis_steps_per_unit[E_AXIS] / EXTRUSION_AREA)
   // seems to cause problems, very rough running #define ADVANCE_HAS_OWN_INTERRUPT_SERVICE_ROUTINE
-#endif // ADVANCE
+#endif // EXTRUDER_ADVANCE
 
 // Arc interpretation settings:
 #define MM_PER_ARC_SEGMENT 1
