@@ -1,7 +1,7 @@
 #ifndef CONFIGURATION_H
 #define CONFIGURATION_H
 
-// This configurtion file contains the basic settings.
+// This configuration file contains the basic settings.
 // Advanced settings can be found in Configuration_adv.h 
 // BASIC SETTINGS: select your board type, temperature sensor type, axis scaling, and endstop configuration
 
@@ -305,16 +305,16 @@ const bool Z_ENDSTOPS_INVERTING = false; // set to true to invert the logic of t
 //#define DEFAULT_AXIS_STEPS_PER_UNIT   {78.7402,78.7402,200*8/3,760*1.1}                    // default steps per unit for ultimaker 
 #define PI 3.14159265359
 #define DEFAULT_AXIS_STEPS_PER_UNIT   {((XY_MTR_STPS/MICROSTEPPING_RATIO)/(BELT_PITCH*GEAR_TEETH)), ((XY_MTR_STPS/MICROSTEPPING_RATIO)/(BELT_PITCH*GEAR_TEETH)), ((Z_MTR_STPS/MICROSTEPPING_RATIO)/Z_ROD_PITCH),((PACKING_DENSITY*EXTRUDER_MTR_STPS*EXTRUDER_GEAR_RATIO*(1/MICROSTEPPING_RATIO))/(PI*BOLT_DIAMETER))}
-#define DEFAULT_MAX_FEEDRATE          {500, 500, 5, 45}    // (mm/sec)    
+#define DEFAULT_MAX_FEEDRATE          {500, 500, 5, 300}    // (mm/sec)    
 #define DEFAULT_MAX_ACCELERATION      {9000,9000,100,10000}    // X, Y, Z, E maximum start speed for accelerated moves. E default values are good for skeinforge 40+, for older versions raise them a lot.
 
-#define DEFAULT_ACCELERATION          3000    // X, Y, Z and E max acceleration in mm/s^2 for printing moves 
-#define DEFAULT_RETRACT_ACCELERATION  3000   // X, Y, Z and E max acceleration in mm/s^2 for r retracts
+#define DEFAULT_ACCELERATION          32000    // X, Y, Z max acceleration in mm/s^2 for printing moves. This is merely an upper ceiling for any calculation.
+#define DEFAULT_RETRACT_ACCELERATION  32000   // in mm/s^2 for r retracts
 
 // 
 #define DEFAULT_XYJERK                20.0    // (mm/sec)
 #define DEFAULT_ZJERK                 0.4     // (mm/sec)
-#define DEFAULT_EJERK                 5.0    // (mm/sec)
+#define DEFAULT_EJERK                 500.0    // (mm/sec)  the extruder can often handle any steps thrown at it
 
 //===========================================================================
 //=============================Additional Features===========================
