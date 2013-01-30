@@ -77,6 +77,9 @@ unsigned long axis_steps_per_sqr_second[NUM_AXIS];
 
 #ifdef EXTRUDER_ADVANCE
 float extruder_advance_k; // defaulted elsewhere
+int extruder_debug_i = 0;
+int extruder_debug_j = 0;
+int extruder_debug_k = 0;
 #endif
 
 // The current position of the tool in absolute steps
@@ -172,7 +175,7 @@ FORCE_INLINE float intersection_distance(float initial_rate, float final_rate, f
 #else
 
 // using uint should be good up till 65,535 steps/sec
-FORCE_INLINE uint32_t estimate_acceleration_distance( uint32_t initial_rate, uint32_t target_rate, uint32_t acceleration )
+/*FORCE_INLINE uint32_t estimate_acceleration_distance( uint32_t initial_rate, uint32_t target_rate, uint32_t acceleration )
 	{
 	if ( acceleration != 0 ) {
 
@@ -189,7 +192,7 @@ FORCE_INLINE uint32_t estimate_acceleration_distance( uint32_t initial_rate, uin
 		return 0;  // acceleration was 0, set acceleration distance to 0
 		}
 	}
-
+*/
 // using uint should be good up till 65,535 steps/sec
 FORCE_INLINE uint32_t estimate_acceleration_distance_precalc( uint32_t initial_rate_sq, uint32_t target_rate_sq, uint32_t acceleration_x2 )
 	{
@@ -208,14 +211,16 @@ FORCE_INLINE uint32_t estimate_acceleration_distance_from0( uint32_t target_rate
 // a total travel of distance. This can be used to compute the intersection point between acceleration and
 // deceleration in the cases where the trapezoid has no plateau (i.e. never reaches maximum speed)
 
-FORCE_INLINE uint32_t intersection_distance( uint32_t initial_rate, uint32_t final_rate, uint32_t acceleration, uint32_t distance ) 
+/*FORCE_INLINE uint32_t intersection_distance( uint32_t initial_rate, uint32_t final_rate, uint32_t acceleration, uint32_t distance ) 
 	{
 	return ( 2 * acceleration * distance - initial_rate * initial_rate + final_rate * final_rate ) / ( 4 * acceleration );
 	}
-
-FORCE_INLINE uint32_t intersection_distance_precalc( uint32_t initial_rate_sq, uint32_t target_rate_sq, uint32_t acceleration_x2, uint32_t distance ) 
+*/
+// the result must be singed, because with Jerk involved, we may end up with a result telling us that it's impossible
+// to decelerate to the target rate in time, or that it's impossible to accelerate to the target rate in time
+/*FORCE_INLINE int32_t intersection_distance_precalc( uint32_t initial_rate_sq, uint32_t target_rate_sq, uint32_t acceleration_x2, uint32_t distance ) 
 	{
-	if ( ( (float)acceleration_x2 * distance ) >= ( (float)( (uint32_t)1 << 31 )*2.f ) ) {
+	if ( ( (float)acceleration_x2 * distance ) >= ( (float)( (uint32_t)1 << 31 ) ) ) {
 		// it will overflow! can't use longs for the calculation in that case
 		// but this calc only gets done if there is no plateau, which is less likely when the distance is very large
 		MYSERIAL.print( "accel_x2 * dist high for long" ); 
@@ -225,7 +230,27 @@ FORCE_INLINE uint32_t intersection_distance_precalc( uint32_t initial_rate_sq, u
 		MYSERIAL.println( distance );  
 		}
 
-	return ( acceleration_x2 * distance - initial_rate_sq + target_rate_sq ) / ( 2 * acceleration_x2 );
+	// with a very high initial rate, and a low final rate we may get a negative result if there's not actually enough distance
+	// to accomplish the task
+	return ( (int32_t)( acceleration_x2 * distance ) - initial_rate_sq + target_rate_sq ) / ( 2 * acceleration_x2 );
+	}
+*/
+
+FORCE_INLINE int32_t intersection_distance_precalc( int32_t initial_rate_sq, int32_t target_rate_sq, int32_t acceleration_x2, int32_t distance ) 
+	{
+	if ( ( (float)acceleration_x2 * distance ) >= ( (float)( (uint32_t)1 << 31 ) ) ) {
+		// it will overflow! can't use longs for the calculation in that case
+		// but this calc only gets done if there is no plateau, which is less likely when the distance is very large
+		MYSERIAL.print( "accel_x2 * dist high for long" ); 
+		MYSERIAL.print( ' ' );  
+		MYSERIAL.println( acceleration_x2 );  
+		MYSERIAL.print( ' ' );  
+		MYSERIAL.println( distance );  
+		}
+
+	// with a very high initial rate, and a low final rate we may get a negative result if there's not actually enough distance
+	// to accomplish the task
+	return ( (int32_t)( acceleration_x2 * distance ) - initial_rate_sq + target_rate_sq ) / ( 2 * acceleration_x2 );
 	}
 
 
@@ -274,6 +299,7 @@ void calculate_trapezoid_for_block(block_t *block, float entry_factor, float exi
 	#ifdef FLOAT_ESTIMATES
 		int32_t accelerate_steps = ceil(  estimate_acceleration_distance(block->initial_rate, block->nominal_rate, acceleration ) );
 		int32_t decelerate_steps = floor( estimate_acceleration_distance(block->nominal_rate, block->final_rate,  -acceleration ) );
+		int32_t plateau_steps = block->step_event_count - accelerate_steps - decelerate_steps;
 	#else
 		if ( block->nominal_rate >= ( (uint32_t)1 << 16 ) ) {
 			// it will overflow! can't use longs for the calculation in that case
@@ -288,8 +314,44 @@ void calculate_trapezoid_for_block(block_t *block, float entry_factor, float exi
 		uint32_t final_sq   = block->final_rate   * block->final_rate;
 		uint32_t accel_x2 = acceleration * 2;
 
+		// see if there are any surprises
+		if ( acceleration < 0 ) {
+			MYSERIAL.println( "acceleration < 0" ); 
+		}
+		#ifdef check_assumptions
+		if ( initial_sq > nominal_sq ) {
+			MYSERIAL.println( "initial_sq > nominal_sq" ); 
+			MYSERIAL.print( " i:" );  
+			MYSERIAL.print( block->initial_rate  );  
+			MYSERIAL.print( " n:" );  
+			MYSERIAL.print( block->nominal_rate  );  
+			MYSERIAL.print( " a:" );  
+			MYSERIAL.println( acceleration  );  
+		}
+		if ( final_sq > nominal_sq ) {
+			MYSERIAL.println( "final_sq > nominal_sq" ); 
+		}
+		if ( initial_sq > final_sq ) {
+			MYSERIAL.println( "initial_sq > final_sq" ); 
+			MYSERIAL.print( " i:" );  
+			MYSERIAL.print( block->initial_rate  );  
+			MYSERIAL.print( " n:" );  
+			MYSERIAL.print( block->nominal_rate  );  
+			MYSERIAL.print( " f:" );  
+			MYSERIAL.print( block->final_rate  );  
+			MYSERIAL.print( " a:" );  
+			MYSERIAL.println( acceleration  );  
+		}
+		#endif
+
+		// Calculate the size of Plateau of Nominal Rate.
 		uint32_t accelerate_steps = estimate_acceleration_distance_precalc( initial_sq, nominal_sq, accel_x2 );
-		uint32_t decelerate_steps = estimate_acceleration_distance_precalc( final_sq,   nominal_sq, accel_x2 );   // make sure they're set up for a positive calc result
+		int32_t plateau_steps = block->step_event_count - accelerate_steps; // partial result
+		if ( plateau_steps > 0 ) { 
+			// there might be a plateau - it depends upon the decleration distance
+			uint32_t decelerate_steps = estimate_acceleration_distance_precalc( final_sq,   nominal_sq, accel_x2 );   // make sure they're set up for a positive calc result
+			plateau_steps -= decelerate_steps;
+			}
 	#endif
 
 	#ifdef EXTRUDER_ADVANCE
@@ -305,8 +367,6 @@ void calculate_trapezoid_for_block(block_t *block, float entry_factor, float exi
 	  long nominal_decel_steps = decelerate_steps;
 	#endif // EXTRUDER_ADVANCE
 
-	  // Calculate the size of Plateau of Nominal Rate.
-	  int32_t plateau_steps = block->step_event_count - accelerate_steps-decelerate_steps;
 
 	  // Is the Plateau of Nominal Rate smaller than nothing? That means no cruising, and we will
 	  // have to use intersection_distance() to calculate when to abort acceleration and start braking
@@ -318,14 +378,36 @@ void calculate_trapezoid_for_block(block_t *block, float entry_factor, float exi
 		 accelerate_steps = min( accelerate_steps, block->step_event_count );
 	#else
 		 //accelerate_steps = intersection_distance( block->initial_rate, block->final_rate, acceleration, block->step_event_count );
-		 accelerate_steps = intersection_distance_precalc( initial_sq, final_sq, accel_x2, block->step_event_count );
-		 if ( accelerate_steps > block->step_event_count ) {
-			 // it will overflow! can't use longs for the calculation in that case
+		 int32_t intersect_steps = intersection_distance_precalc( initial_sq, final_sq, accel_x2, block->step_event_count );
+#define trace_unachievables
+#ifdef trace_unachievables
+		 if ( intersect_steps > block->step_event_count || intersect_steps < 0 ) {
+			 // it would take more distance than we apparently have to get to the final speed. Something's wrong with planning, or Jerk is being relied upn.
 			 MYSERIAL.print( "intersection_distance_precalc got bad result" ); 
-			 MYSERIAL.print( ' ' );  
+			 MYSERIAL.print( " intersect:" );  
+			 MYSERIAL.print( intersect_steps );  
+			 MYSERIAL.print( " d:" );  
+			 MYSERIAL.print( block->step_event_count  );  
+			 MYSERIAL.print( " i2:" );  
+			 MYSERIAL.print( initial_sq );  
+			 MYSERIAL.print( " f2:" );  
+			 MYSERIAL.print( final_sq );  
+			 MYSERIAL.print( " 2a:" );  
+			 MYSERIAL.println( accel_x2 );  
+			 MYSERIAL.print( " asteps:" );  
 			 MYSERIAL.println( accelerate_steps );  
-			 }
-		 // using unsigned, this can't help: accelerate_steps = max(accelerate_steps,0); // Check limits due to numerical round-off
+			 //MYSERIAL.print( " decel steps:" );  
+			 //MYSERIAL.print( decelerate_steps );  
+		}
+#endif
+
+		 if ( intersect_steps > block->step_event_count ) {
+			 accelerate_steps = block->step_event_count; // a likely good default - certainly if start and end speeds are the same
+		 }
+		 else {
+			 accelerate_steps = max( intersect_steps, 0 ); // Check limits due to impossible tasks being assigned (bad planning? Jerk?)
+		 }
+
 	#endif
 		 plateau_steps = 0;
 	  }

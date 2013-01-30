@@ -1493,11 +1493,32 @@ void process_commands()
 	 #ifdef EXTRUDER_ADVANCE
     case 305: // M305 AadvanceFactor*1000 e.g. 100 for a value of .100
       {
-        if(code_seen('A')) extruder_advance_k = code_value() / 1000;
-        SERIAL_PROTOCOL(MSG_OK);
+		if (code_seen( 'A' ) ) {
+			extruder_advance_k = code_value() / 1000;
+        //SERIAL_PROTOCOL(MSG_OK);
 		  SERIAL_PROTOCOL(" a:");
         SERIAL_PROTOCOL(extruder_advance_k);
         SERIAL_PROTOCOLLN("");
+			}
+		if (code_seen( 'I' ) ) {
+			extruder_debug_i = code_value();
+		  SERIAL_PROTOCOL(" I:");
+        SERIAL_PROTOCOL(extruder_debug_i);
+        SERIAL_PROTOCOLLN("");
+			}
+		if (code_seen( 'J' ) ) {
+			extruder_debug_i = code_value();
+		  SERIAL_PROTOCOL(" J:");
+        SERIAL_PROTOCOL(extruder_debug_i);
+        SERIAL_PROTOCOLLN("");
+			}
+		if (code_seen( 'K' ) ) {
+			extruder_debug_i = code_value();
+		  SERIAL_PROTOCOL(" K:");
+        SERIAL_PROTOCOL(extruder_debug_i);
+        SERIAL_PROTOCOLLN("");
+			}
+
       }
       break;
     #endif //PIDTEMP
