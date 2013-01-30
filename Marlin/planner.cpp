@@ -65,7 +65,7 @@
 unsigned long minsegmenttime;
 float max_feedrate[4]; // set the max speeds
 float axis_steps_per_unit[4];
-unsigned long max_acceleration_units_per_sq_second[4]; // Use M201 to override by software
+unsigned long max_acceleration_units_per_sq_second[NUM_STEPPERS]; // Use M201 to override by software
 float minimumfeedrate;
 float acceleration;         // Normal acceleration mm/s^2  THIS IS THE DEFAULT (maximum attempted setting) ACCELERATION for all moves. M204 SXXXX Individual axis accelerations may reduce this but wil not increase it.
 float retract_acceleration; //  mm/s^2   filament pull-pack and push-forward  while standing still in the other axis M204 TXXXX
@@ -80,8 +80,8 @@ float extruder_advance_k; // defaulted elsewhere
 #endif
 
 // The current position of the tool in absolute steps
-long position[4];   //rescaled from extern when axis_steps_per_unit are changed by gcode
-static float previous_speed[4]; // Speed of previous path line segment
+long position[NUM_STEPPERS];   //rescaled from extern when axis_steps_per_unit are changed by gcode
+static float previous_speed[NUM_STEPPERS]; // Speed of previous path line segment
 static float previous_nominal_speed; // Nominal speed of previous path line segment
 
 extern volatile int extrudemultiply; // Sets extrude multiply factor (in percent)
@@ -141,6 +141,7 @@ static int8_t prev_block_index(int8_t block_index) {
 
 // Calculates the distance (not time) it takes to accelerate from initial_rate to target_rate using the 
 // given acceleration:
+#ifdef FLOAT_ESTIMATES
 FORCE_INLINE float estimate_acceleration_distance(float initial_rate, float target_rate, float acceleration)
 {
   if (acceleration!=0) {
@@ -158,15 +159,77 @@ FORCE_INLINE float estimate_acceleration_distance(float initial_rate, float targ
 // deceleration in the cases where the trapezoid has no plateau (i.e. never reaches maximum speed)
 
 FORCE_INLINE float intersection_distance(float initial_rate, float final_rate, float acceleration, float distance) 
-{
-  if (acceleration!=0) {
-    return((2.0*acceleration*distance-initial_rate*initial_rate+final_rate*final_rate)/
-      (4.0*acceleration) );
-  }
-  else {
-    return 0.0;  // acceleration was 0, set intersection distance to 0
-  }
-}
+	{
+	if (acceleration!=0) {
+		return((2.0*acceleration*distance-initial_rate*initial_rate+final_rate*final_rate)/
+			(4.0*acceleration) );
+		}
+	else {
+		return 0.0;  // acceleration was 0, set intersection distance to 0
+		}
+	}
+
+#else
+
+// using uint should be good up till 65,535 steps/sec
+FORCE_INLINE uint32_t estimate_acceleration_distance( uint32_t initial_rate, uint32_t target_rate, uint32_t acceleration )
+	{
+	if ( acceleration != 0 ) {
+
+		if ( target_rate >= ( (uint32_t)1 << 16 ) ) {
+			// it will overflow! can't use longs for the calculation in that case
+			MYSERIAL.print( "rate high for long sqr" ); 
+			MYSERIAL.print( ' ' );  
+			MYSERIAL.println( target_rate );  
+			}
+
+		return ( ( target_rate * target_rate - initial_rate * initial_rate ) / ( 2 * acceleration ) );
+		}
+	else {
+		return 0;  // acceleration was 0, set acceleration distance to 0
+		}
+	}
+
+// using uint should be good up till 65,535 steps/sec
+FORCE_INLINE uint32_t estimate_acceleration_distance_precalc( uint32_t initial_rate_sq, uint32_t target_rate_sq, uint32_t acceleration_x2 )
+	{
+	return ( ( target_rate_sq - initial_rate_sq ) / acceleration_x2 );
+	}
+
+
+FORCE_INLINE uint32_t estimate_acceleration_distance_from0( uint32_t target_rate, uint32_t acceleration )
+	{
+	return ( ( target_rate * target_rate ) / ( 2 * acceleration ) );
+	}
+
+
+// This function gives you the point at which you must start braking (at the rate of -acceleration) if 
+// you started at speed initial_rate and accelerated until this point and want to end at the final_rate after
+// a total travel of distance. This can be used to compute the intersection point between acceleration and
+// deceleration in the cases where the trapezoid has no plateau (i.e. never reaches maximum speed)
+
+FORCE_INLINE uint32_t intersection_distance( uint32_t initial_rate, uint32_t final_rate, uint32_t acceleration, uint32_t distance ) 
+	{
+	return ( 2 * acceleration * distance - initial_rate * initial_rate + final_rate * final_rate ) / ( 4 * acceleration );
+	}
+
+FORCE_INLINE uint32_t intersection_distance_precalc( uint32_t initial_rate_sq, uint32_t target_rate_sq, uint32_t acceleration_x2, uint32_t distance ) 
+	{
+	if ( ( (float)acceleration_x2 * distance ) >= ( (float)( (uint32_t)1 << 31 )*2.f ) ) {
+		// it will overflow! can't use longs for the calculation in that case
+		// but this calc only gets done if there is no plateau, which is less likely when the distance is very large
+		MYSERIAL.print( "accel_x2 * dist high for long" ); 
+		MYSERIAL.print( ' ' );  
+		MYSERIAL.println( acceleration_x2 );  
+		MYSERIAL.print( ' ' );  
+		MYSERIAL.println( distance );  
+		}
+
+	return ( acceleration_x2 * distance - initial_rate_sq + target_rate_sq ) / ( 2 * acceleration_x2 );
+	}
+
+
+#endif
 
 // Calculates trapezoid parameters so that the entry- and exit-speed is compensated by the provided factors.
 
@@ -175,68 +238,117 @@ void calculate_trapezoid_for_block(block_t *block, float entry_factor, float exi
 	entry_factor = min( entry_factor, 1.0f );
 	exit_factor  = min( exit_factor,  1.0f );
 
-  unsigned long initial_rate = ceil(block->nominal_rate*entry_factor); // (step/min)
-  unsigned long final_rate = ceil(block->nominal_rate*exit_factor); // (step/min)
+	unsigned long initial_rate = ceil(block->nominal_rate*entry_factor); // (step/min)
+	unsigned long final_rate = ceil(block->nominal_rate*exit_factor); // (step/min)
 
-  // Limit minimal step rate (Otherwise the timer will overflow.)
-  if(initial_rate <120) {
-    initial_rate=120; 
-  }
-  if(final_rate < 120) {
-    final_rate=120;  
-  }
+	// Limit minimal step rate (Otherwise the timer will overflow.)
+	if(initial_rate <120) {
+	 initial_rate=120; 
+	}
+	if(final_rate < 120) {
+	 final_rate=120;  
+	}
 
-  long acceleration = block->acceleration_st;
-  int32_t accelerate_steps =
-    ceil(estimate_acceleration_distance(block->initial_rate, block->nominal_rate, acceleration));
-  int32_t decelerate_steps =
-    floor(estimate_acceleration_distance(block->nominal_rate, block->final_rate, -acceleration));
+	long acceleration = block->acceleration_st;
 
+	if ( acceleration == 0 ) {
+		// skip all the calcs - we'd get errors
+		// block->accelerate_until = accelerate_steps;
+		// block->decelerate_after = accelerate_steps+plateau_steps;
+		CRITICAL_SECTION_START;  // Fill variables used by the stepper in a critical section
+		if ( block->busy == false ) { // Don't update variables if block is busy.
+			block->accelerate_until = 0;
+			block->decelerate_after = block->step_event_count;
+			block->initial_rate = initial_rate;
+			block->final_rate   = final_rate;
 #ifdef EXTRUDER_ADVANCE
- #ifdef ADVANCE_WITH_SQUARE_LAW
-  long init_advance = block->advance*entry_factor*entry_factor; 
-  long fin_advance  = block->advance*exit_factor*exit_factor;
- #else
-  // it's linear
-  long init_advance = block->advance * entry_factor; 
-  long fin_advance  = block->advance * exit_factor;
- #endif
-  long nominal_accel_steps = accelerate_steps;
-  long nominal_decel_steps = decelerate_steps;
-#endif // EXTRUDER_ADVANCE
-
-  // Calculate the size of Plateau of Nominal Rate.
-  int32_t plateau_steps = block->step_event_count - accelerate_steps-decelerate_steps;
-
-  // Is the Plateau of Nominal Rate smaller than nothing? That means no cruising, and we will
-  // have to use intersection_distance() to calculate when to abort acceleration and start braking
-  // in order to reach the final_rate exactly at the end of this block.
-  if ( plateau_steps < 0 ) {
-    accelerate_steps = ceil( intersection_distance(block->initial_rate, block->final_rate, acceleration, block->step_event_count) );
-    accelerate_steps = max(accelerate_steps,0); // Check limits due to numerical round-off
-    accelerate_steps = min(accelerate_steps,block->step_event_count);
-    plateau_steps = 0;
-  }
-
-
-  // block->accelerate_until = accelerate_steps;
-  // block->decelerate_after = accelerate_steps+plateau_steps;
-  CRITICAL_SECTION_START;  // Fill variables used by the stepper in a critical section
-  if ( block->busy == false ) { // Don't update variables if block is busy.
-    block->accelerate_until = accelerate_steps;
-    block->decelerate_after = accelerate_steps + plateau_steps;
-    block->initial_rate = initial_rate;
-    block->final_rate   = final_rate;
-#ifdef EXTRUDER_ADVANCE
-    block->initial_advance = init_advance;
-    block->final_advance   = fin_advance;
-	 // block.advance here is what it would be if full velocity is reached, so we use the nominal steps for each phase, and only as much of 
-	 // each will be applied as there is time and distance for.
-	 block->advance_rate   = ( block->advance - init_advance ) / (float)nominal_accel_steps;		// spread the advance evenly across the entire acceleration distance
-	 block->unadvance_rate = ( block->advance - fin_advance  ) / (float)nominal_decel_steps;		// spread the advance evenly across the entire acceleration distance
+			block->initial_advance = block->advance;
+			block->final_advance   = block->advance;
+			block->advance_rate   = 0;		
+			block->unadvance_rate = 0;		
 #endif //EXTRUDER_ADVANCE
-  }
-  CRITICAL_SECTION_END;
+			}
+		CRITICAL_SECTION_END;
+		}
+	else {
+	#ifdef FLOAT_ESTIMATES
+		int32_t accelerate_steps = ceil(  estimate_acceleration_distance(block->initial_rate, block->nominal_rate, acceleration ) );
+		int32_t decelerate_steps = floor( estimate_acceleration_distance(block->nominal_rate, block->final_rate,  -acceleration ) );
+	#else
+		if ( block->nominal_rate >= ( (uint32_t)1 << 16 ) ) {
+			// it will overflow! can't use longs for the calculation in that case
+			MYSERIAL.print( "rate high for long sqr" ); 
+			MYSERIAL.print( ' ' );  
+			MYSERIAL.println( block->nominal_rate );  
+			}
+
+		// eliminate redundant calcs
+		uint32_t nominal_sq = block->nominal_rate * block->nominal_rate;
+		uint32_t initial_sq = block->initial_rate * block->initial_rate;
+		uint32_t final_sq   = block->final_rate   * block->final_rate;
+		uint32_t accel_x2 = acceleration * 2;
+
+		uint32_t accelerate_steps = estimate_acceleration_distance_precalc( initial_sq, nominal_sq, accel_x2 );
+		uint32_t decelerate_steps = estimate_acceleration_distance_precalc( final_sq,   nominal_sq, accel_x2 );   // make sure they're set up for a positive calc result
+	#endif
+
+	#ifdef EXTRUDER_ADVANCE
+	 #ifdef ADVANCE_WITH_SQUARE_LAW
+	  long init_advance = block->advance*entry_factor*entry_factor; 
+	  long fin_advance  = block->advance*exit_factor*exit_factor;
+	 #else
+	  // it's linear
+	  long init_advance = block->advance * entry_factor; 
+	  long fin_advance  = block->advance * exit_factor;
+	 #endif
+	  long nominal_accel_steps = accelerate_steps;
+	  long nominal_decel_steps = decelerate_steps;
+	#endif // EXTRUDER_ADVANCE
+
+	  // Calculate the size of Plateau of Nominal Rate.
+	  int32_t plateau_steps = block->step_event_count - accelerate_steps-decelerate_steps;
+
+	  // Is the Plateau of Nominal Rate smaller than nothing? That means no cruising, and we will
+	  // have to use intersection_distance() to calculate when to abort acceleration and start braking
+	  // in order to reach the final_rate exactly at the end of this block.
+	  if ( plateau_steps < 0 ) {
+	#ifdef FLOAT_ESTIMATES
+		 accelerate_steps = ceil( intersection_distance(block->initial_rate, block->final_rate, acceleration, block->step_event_count) );
+		 accelerate_steps = max(accelerate_steps,0); // Check limits due to numerical round-off
+		 accelerate_steps = min( accelerate_steps, block->step_event_count );
+	#else
+		 //accelerate_steps = intersection_distance( block->initial_rate, block->final_rate, acceleration, block->step_event_count );
+		 accelerate_steps = intersection_distance_precalc( initial_sq, final_sq, accel_x2, block->step_event_count );
+		 if ( accelerate_steps > block->step_event_count ) {
+			 // it will overflow! can't use longs for the calculation in that case
+			 MYSERIAL.print( "intersection_distance_precalc got bad result" ); 
+			 MYSERIAL.print( ' ' );  
+			 MYSERIAL.println( accelerate_steps );  
+			 }
+		 // using unsigned, this can't help: accelerate_steps = max(accelerate_steps,0); // Check limits due to numerical round-off
+	#endif
+		 plateau_steps = 0;
+	  }
+	  // block->accelerate_until = accelerate_steps;
+	  // block->decelerate_after = accelerate_steps+plateau_steps;
+	  CRITICAL_SECTION_START;  // Fill variables used by the stepper in a critical section
+	  if ( block->busy == false ) { // Don't update variables if block is busy.
+		  block->accelerate_until = accelerate_steps;
+		  block->decelerate_after = accelerate_steps + plateau_steps;
+		  block->initial_rate = initial_rate;
+		  block->final_rate   = final_rate;
+#ifdef EXTRUDER_ADVANCE
+		  block->initial_advance = init_advance;
+		  block->final_advance   = fin_advance;
+		  // block.advance here is what it would be if full velocity is reached, so we use the nominal steps for each phase, and only as much of 
+		  // each will be applied as there is time and distance for.
+		  block->advance_rate   = ( block->advance - init_advance ) / nominal_accel_steps;		// spread the advance evenly across the entire acceleration distance
+		  block->unadvance_rate = ( block->advance - fin_advance  ) / nominal_decel_steps;		// spread the advance evenly across the entire acceleration distance
+#endif //EXTRUDER_ADVANCE
+		  }
+	  CRITICAL_SECTION_END;
+	}
+
 }                    
 
 // Calculates the maximum allowable speed at this point when you must be able to reach target_velocity using the 
@@ -814,7 +926,7 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
   block->unadvance_rate = 0;
 
   // Calculate advance 
-  if ( (block->steps_e == 0) || (block->steps_x == 0 && block->steps_y == 0 && block->steps_z == 0) ) {
+  if ( extruder_advance_k == 0 || (block->steps_e == 0) || (block->steps_x == 0 && block->steps_y == 0 && block->steps_z == 0) ) {
     block->advance = 0;
   }
   else {
@@ -828,10 +940,10 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
     block->advance = advance_stepsx256;
 
 	 // do a nominal calculation - if it's replanned they will be revised
-	 long acc_dist = estimate_acceleration_distance( 0, block->nominal_rate, block->acceleration_st );
+	 long acc_dist = estimate_acceleration_distance_from0( block->nominal_rate, block->acceleration_st );
     if ( acc_dist > 0 ) {
 	   // this is a differential advance rate, only correct if the initial speed was zero. 
-      block->advance_rate = advance_stepsx256 / (float)acc_dist;		// spread the advance evenly across the entire acceleration distance
+      block->advance_rate = advance_stepsx256 / acc_dist;		// spread the advance evenly across the entire acceleration distance
 		block->unadvance_rate = block->advance_rate;
     }
 

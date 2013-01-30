@@ -303,5 +303,6 @@ const int dropsegments=5; //everything with less than this number of steps will 
   #undef BED_MAXTEMP
 #endif
 
+#define NUM_STEPPERS 4
 
 #endif //__CONFIGURATION_ADV_H

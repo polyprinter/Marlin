@@ -268,7 +268,7 @@ FORCE_INLINE unsigned short calc_timer(unsigned short step_rate) {
   }
 
   if ( timer < (MIN_TIMER_COUNT-1)  ) {
-    //(20kHz this should never happen)
+    //(>20kHz this should never happen)
      MYSERIAL.print( MSG_STEPPER_TO_HIGH ); 
     MYSERIAL.print( step_rate );  
     MYSERIAL.print( ' ' );  
@@ -639,7 +639,7 @@ ISR(TIMER1_COMPA_vect)
 	  }
 
       step_events_completed += 1;  
-      if(step_events_completed >= current_block->step_event_count) break;
+      if(step_events_completed >= current_block->step_event_count) break; 
 		}  // end of looping
 
     // Calculate new timer value
@@ -749,8 +749,11 @@ void HandleExtruderAdvance()
 	//const int MAX_E_STEPS_PER_TIMER_TICK = 4; // don't generate a flurry of extra ticks. The stepper can only react to a limited number per millisecond.
 	const int MAX_E_STEPS_PER_TIMER_TICK = 1; // don't generate a flurry of extra ticks. The stepper can only react to a limited number per millisecond.
  #endif
+ #if MAX_E_STEPS_PER_TIMER_TICK == 1
+ #else
     // Set E direction (Depends on E direction + advance)
     for ( unsigned char i=0; i < MAX_E_STEPS_PER_TIMER_TICK; i++ ) {
+ #endif
       if (e_steps[0] != 0) {
 			// direction changes may only occur when the step pin is going to be stable, or has been stable for a minimum time (200ns for Allegro A4982).
 			// There's a bit of code before and after the direction setting here, so it's probably OK.
@@ -795,8 +798,13 @@ void HandleExtruderAdvance()
         }
       }
  #endif
-    }
-  }
+
+ #if MAX_E_STEPS_PER_TIMER_TICK == 1
+ #else
+    }  // end of for loop
+ #endif
+
+	}
 #endif // EXTRUDER_ADVANCE
 
 void st_init()
