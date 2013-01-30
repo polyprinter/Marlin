@@ -38,11 +38,11 @@ typedef struct {
   unsigned char direction_bits;             // The direction bit set for this block (refers to *_DIRECTION_BIT in config.h)
   unsigned char active_extruder;            // Selects the active extruder
 #ifdef EXTRUDER_ADVANCE
-	 int advance_rate;
-	 int unadvance_rate;
-	 long initial_advance;
-	 long final_advance;
-	 float advance;
+	 uint16_t advance_rate;
+	 uint16_t unadvance_rate;
+	 uint32_t initial_advance;
+	 uint32_t final_advance;
+	 uint32_t advance;
 #endif
 
   // Fields used by the motion planner to manage acceleration
@@ -92,8 +92,9 @@ extern float max_z_jerk;
 extern float max_e_jerk;
 extern float mintravelfeedrate;
 extern unsigned long axis_steps_per_sqr_second[NUM_AXIS];
+#ifdef EXTRUDER_ADVANCE
 extern float extruder_advance_k;
-
+#endif
 #ifdef AUTOTEMP
     extern bool autotemp_enabled;
     extern float autotemp_max;
