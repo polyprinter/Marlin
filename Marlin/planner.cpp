@@ -436,7 +436,7 @@ void calculate_trapezoid_for_block(block_t *block, float entry_factor, float exi
 #endif //EXTRUDER_ADVANCE
 		  }
 	  CRITICAL_SECTION_END;
-
+#ifdef TRACE_REPLAN_ADVANCE
 	  SERIAL_ECHO_START;
 	  SERIAL_ECHOPGM("r advance :");  // replan
 	  SERIAL_ECHO(   block->advance );
@@ -444,7 +444,7 @@ void calculate_trapezoid_for_block(block_t *block, float entry_factor, float exi
 	  SERIAL_ECHO( block->advance_rate );
 	  SERIAL_ECHOPGM(" unadvance rate :");
 	  SERIAL_ECHOLN( block->unadvance_rate );
-
+#endif
 	}
 
 }                    
@@ -1056,12 +1056,13 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
 
   }
   
-   SERIAL_ECHO_START;
+ #ifdef TRACE_ADVANCE
+  SERIAL_ECHO_START;
    SERIAL_ECHOPGM("i advance :");
    SERIAL_ECHO(block->advance);
    SERIAL_ECHOPGM(" advance rate :");
    SERIAL_ECHOLN(block->advance_rate);
-   
+ #endif
 #endif // EXTRUDER_ADVANCE
 
   calculate_trapezoid_for_block(block, block->entry_speed/block->nominal_speed, safe_speed/block->nominal_speed);
