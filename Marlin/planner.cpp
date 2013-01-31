@@ -314,11 +314,11 @@ void calculate_trapezoid_for_block(block_t *block, float entry_factor, float exi
 		uint32_t final_sq   = block->final_rate   * block->final_rate;
 		uint32_t accel_x2 = acceleration * 2;
 
+		#ifdef check_assumptions
 		// see if there are any surprises
 		if ( acceleration < 0 ) {
 			MYSERIAL.println( "acceleration < 0" ); 
-		}
-		#ifdef check_assumptions
+			}
 		if ( initial_sq > nominal_sq ) {
 			MYSERIAL.println( "initial_sq > nominal_sq" ); 
 			MYSERIAL.print( " i:" );  
@@ -347,26 +347,18 @@ void calculate_trapezoid_for_block(block_t *block, float entry_factor, float exi
 		// Calculate the size of Plateau of Nominal Rate.
 		uint32_t accelerate_steps = estimate_acceleration_distance_precalc( initial_sq, nominal_sq, accel_x2 );
 		int32_t plateau_steps = block->step_event_count - accelerate_steps; // partial result
+	 #ifdef EXTRUDER_ADVANCE
+		uint32_t decelerate_steps = estimate_acceleration_distance_precalc( final_sq,   nominal_sq, accel_x2 );   // make sure they're set up for a positive calc result
+		plateau_steps -= decelerate_steps;
+	 #else
+		// can sometimes skip the calculation
 		if ( plateau_steps > 0 ) { 
 			// there might be a plateau - it depends upon the decleration distance
 			uint32_t decelerate_steps = estimate_acceleration_distance_precalc( final_sq,   nominal_sq, accel_x2 );   // make sure they're set up for a positive calc result
 			plateau_steps -= decelerate_steps;
 			}
-	#endif
-
-	#ifdef EXTRUDER_ADVANCE
-	 #ifdef ADVANCE_WITH_SQUARE_LAW
-	  long init_advance = block->advance*entry_factor*entry_factor; 
-	  long fin_advance  = block->advance*exit_factor*exit_factor;
-	 #else
-	  // it's linear
-	  long init_advance = block->advance * entry_factor; 
-	  long fin_advance  = block->advance * exit_factor;
 	 #endif
-	  long nominal_accel_steps = accelerate_steps;
-	  long nominal_decel_steps = decelerate_steps;
-	#endif // EXTRUDER_ADVANCE
-
+	#endif
 
 	  // Is the Plateau of Nominal Rate smaller than nothing? That means no cruising, and we will
 	  // have to use intersection_distance() to calculate when to abort acceleration and start braking
@@ -379,7 +371,7 @@ void calculate_trapezoid_for_block(block_t *block, float entry_factor, float exi
 	#else
 		 //accelerate_steps = intersection_distance( block->initial_rate, block->final_rate, acceleration, block->step_event_count );
 		 int32_t intersect_steps = intersection_distance_precalc( initial_sq, final_sq, accel_x2, block->step_event_count );
-#define trace_unachievables
+//#define trace_unachievables
 #ifdef trace_unachievables
 		 if ( intersect_steps > block->step_event_count || intersect_steps < 0 ) {
 			 // it would take more distance than we apparently have to get to the final speed. Something's wrong with planning, or Jerk is being relied upn.
@@ -407,10 +399,22 @@ void calculate_trapezoid_for_block(block_t *block, float entry_factor, float exi
 		 else {
 			 accelerate_steps = max( intersect_steps, 0 ); // Check limits due to impossible tasks being assigned (bad planning? Jerk?)
 		 }
-
 	#endif
 		 plateau_steps = 0;
 	  }
+
+#ifdef EXTRUDER_ADVANCE
+#ifdef ADVANCE_WITH_SQUARE_LAW
+	  long init_advance = block->advance*entry_factor*entry_factor; 
+	  long fin_advance  = block->advance*exit_factor*exit_factor;
+#else
+	  // it's linear
+	  long init_advance = block->advance * entry_factor; 
+	  long fin_advance  = block->advance * exit_factor;
+#endif
+	  long nominal_accel_steps = accelerate_steps;
+#endif // EXTRUDER_ADVANCE
+
 	  // block->accelerate_until = accelerate_steps;
 	  // block->decelerate_after = accelerate_steps+plateau_steps;
 	  CRITICAL_SECTION_START;  // Fill variables used by the stepper in a critical section
@@ -424,8 +428,8 @@ void calculate_trapezoid_for_block(block_t *block, float entry_factor, float exi
 		  block->final_advance   = fin_advance;
 		  // block.advance here is what it would be if full velocity is reached, so we use the nominal steps for each phase, and only as much of 
 		  // each will be applied as there is time and distance for.
-		  block->advance_rate   = ( block->advance - init_advance ) / nominal_accel_steps;		// spread the advance evenly across the entire acceleration distance
-		  block->unadvance_rate = ( block->advance - fin_advance  ) / nominal_decel_steps;		// spread the advance evenly across the entire acceleration distance
+		  block->advance_rate   = ( block->advance - init_advance ) / nominal_accel_steps;		// spread the advance evenly across the entire theoretical acceleration distance
+		  block->unadvance_rate = ( block->advance - fin_advance  ) / decelerate_steps;		   // spread the advance evenly across the entire theoretical deceleration distance
 #endif //EXTRUDER_ADVANCE
 		  }
 	  CRITICAL_SECTION_END;
@@ -751,35 +755,40 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
   block->busy = false;
 
   // Number of steps for each axis
-  block->steps_x = labs(target[X_AXIS]-position[X_AXIS]);
-  block->steps_y = labs(target[Y_AXIS]-position[Y_AXIS]);
-  block->steps_z = labs(target[Z_AXIS]-position[Z_AXIS]);
-  block->steps_e = labs(target[E_AXIS]-position[E_AXIS]);
+  block->steps_x = target[X_AXIS]-position[X_AXIS];
+  block->steps_y = target[Y_AXIS]-position[Y_AXIS];
+  block->steps_z = target[Z_AXIS]-position[Z_AXIS];
+  block->steps_e = target[E_AXIS]-position[E_AXIS];
   block->steps_e *= extrudemultiply;
   block->steps_e /= 100;
+ 
+  // Compute direction bits for this block and make steps absolute
+  block->direction_bits = 0;
+  if ( block->steps_x < 0 ) { 
+    block->direction_bits |= (1<<X_AXIS); 
+	 block->steps_x = -block->steps_x;
+  }
+  if ( block->steps_y < 0 ) { 
+    block->direction_bits |= (1<<Y_AXIS); 
+	 block->steps_y = -block->steps_y;
+  }
+  if ( block->steps_z < 0 ) { 
+    block->direction_bits |= (1<<Z_AXIS); 
+	 block->steps_z = -block->steps_z;
+  }
+  if ( block->steps_e < 0 ) { 
+    block->direction_bits |= (1<<E_AXIS); 
+	 block->steps_e = -block->steps_e;
+  }
+
   block->step_event_count = max(block->steps_x, max(block->steps_y, max(block->steps_z, block->steps_e)));
 
   // Bail if this is a zero-length block
   if (block->step_event_count <= dropsegments) { 
-    return; 
-  };
+	  return; 
+	  };
 
   block->fan_speed = FanSpeed;
-
-  // Compute direction bits for this block 
-  block->direction_bits = 0;
-  if (target[X_AXIS] < position[X_AXIS]) { 
-    block->direction_bits |= (1<<X_AXIS); 
-  }
-  if (target[Y_AXIS] < position[Y_AXIS]) { 
-    block->direction_bits |= (1<<Y_AXIS); 
-  }
-  if (target[Z_AXIS] < position[Z_AXIS]) { 
-    block->direction_bits |= (1<<Z_AXIS); 
-  }
-  if (target[E_AXIS] < position[E_AXIS]) { 
-    block->direction_bits |= (1<<E_AXIS); 
-  }
 
   block->active_extruder = extruder;
 
@@ -815,7 +824,7 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
   else {
     block->millimeters = sqrt(square(delta_mm[X_AXIS]) + square(delta_mm[Y_AXIS]) + square(delta_mm[Z_AXIS]));
   }
-  float inverse_millimeters = 1.0/block->millimeters;  // Inverse millimeters to remove multiple divides 
+  float inverse_millimeters = 1.0f/block->millimeters;  // Inverse millimeters to remove multiple divides 
 
     // Calculate speed in mm/second for each axis. No divide by zero due to previous checks.
   float inverse_second = feed_rate * inverse_millimeters;
