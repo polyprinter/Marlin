@@ -50,8 +50,17 @@ static long counter_x,       // Counter variables for the Bresenham line tracer
             counter_e;
 volatile static unsigned long step_events_completed; // The number of step events executed in the current block
 #ifdef EXTRUDER_ADVANCE
-  static long advance_rate, unadvance_rate, advance, final_advance = 0;
-  static long old_advance = 0;
+  static uint16_t advance_rate = 0;
+  static uint16_t unadvance_rate = 0; 
+  static int32_t advance = 0;
+  static uint32_t final_advance = 0;
+  static int32_t old_advance = 0;
+#endif
+#define Clamp( x, low, hi ) if ( x < low ) { x = low; } else if ( x > hi ) { x = hi; } 
+#define CAREFUL_ADVANCE
+#ifdef CAREFUL_ADVANCE
+const int MAX_ADVANCEx256 = 256 * 200 * 16; // one full turn - way more than ever needed.
+const int MIN_ADVANCE = 0;		 // never go negative
 #endif
 static long e_steps[3];
 static long acceleration_time, deceleration_time;
@@ -631,6 +640,7 @@ ISR(TIMER1_COMPA_vect)
         counter_e -= current_block->step_event_count;
 		 count_position[E_AXIS] += count_direction[E_AXIS];
 #ifdef EXTRUDER_ADVANCE
+			// collect the steps and put out the pulse later
 			 e_steps[current_block->active_extruder] += count_direction[E_AXIS];
 #else  //!EXTRUDER_ADVANCE
           WRITE_E_STEP(INVERT_E_STEP_PIN);
@@ -667,17 +677,19 @@ ISR(TIMER1_COMPA_vect)
 
         //if(advance > current_block->advance) advance = current_block->advance;
         // Do E steps + advance steps
-        e_steps[current_block->active_extruder] += ((advance >>8) - old_advance);
-        old_advance = advance >>8;  
+		  uint32_t adv_shifted = advance >> 8; // not sure if this is faster
+		  e_steps[current_block->active_extruder] += (int32_t)(adv_shifted - old_advance);
+		  old_advance = adv_shifted;  
  #ifdef DYNAMIC_ADVANCE_OPTION
 		}
  #endif
 #endif
     } 
-    else if (step_events_completed > (unsigned long int)current_block->decelerate_after) {   
+    else if (step_events_completed > (unsigned long int)current_block->decelerate_after) {  
+	   // decelerating
       MultiU24X24toH16(step_rate, deceleration_time, current_block->acceleration_rate);
       
-      if(step_rate > acc_step_rate) { // Check step_rate stays positive
+      if (step_rate > acc_step_rate) { // Check step_rate stays positive
         step_rate = current_block->final_rate;
       }
       else {
@@ -685,7 +697,7 @@ ISR(TIMER1_COMPA_vect)
       }
 
       // lower limit
-      if(step_rate < current_block->final_rate)
+      if ( step_rate < current_block->final_rate )
         step_rate = current_block->final_rate;
 
       // step_rate to timer interval
@@ -696,11 +708,17 @@ ISR(TIMER1_COMPA_vect)
 #ifdef DYNAMIC_ADVANCE_OPTION
 		if ( doAdvance ) {
 #endif
-        advance -= loops_completed *unadvance_rate;
-        //if(advance < final_advance) advance = final_advance;
-        // Do E steps + advance steps
-        e_steps[current_block->active_extruder] += ((advance >>8) - old_advance);
-        old_advance = advance >> 8;  
+			advance -= loops_completed *unadvance_rate;
+			if ( advance < final_advance ) advance = final_advance; // just in case the math went wrong
+       // Do E steps + advance steps
+			uint32_t adv_shifted = advance >> 8; // not sure if this is faster
+			//e_steps[current_block->active_extruder] += (int32_t)(adv_shifted - old_advance);
+			unsigned short decr = old_advance - adv_shifted;
+			// ensure doesn't go negative, for now
+			if ( e_steps[current_block->active_extruder] >= decr ) {
+				e_steps[current_block->active_extruder] -= old_advance - adv_shifted;
+			}
+			old_advance = adv_shifted;  
 #ifdef DYNAMIC_ADVANCE_OPTION
 			}
 #endif

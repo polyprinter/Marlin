@@ -1497,7 +1497,7 @@ void process_commands()
 			extruder_advance_k = code_value() / 1000;
         //SERIAL_PROTOCOL(MSG_OK);
 		  SERIAL_PROTOCOL(" a:");
-        SERIAL_PROTOCOL(extruder_advance_k);
+        SERIAL_PROTOCOL(extruder_advance_k * 1000);
         SERIAL_PROTOCOLLN("");
 			}
 		if (code_seen( 'I' ) ) {

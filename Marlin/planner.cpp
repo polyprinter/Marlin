@@ -413,6 +413,9 @@ void calculate_trapezoid_for_block(block_t *block, float entry_factor, float exi
 	  long fin_advance  = block->advance * exit_factor;
 #endif
 	  long nominal_accel_steps = accelerate_steps;
+	  // advance rate should really only depend upon the extruder acceleration, not anything else? may not need to be recalculated at all
+	  uint16_t advance_rate   = ( block->advance - init_advance ) / nominal_accel_steps;		// spread the advance evenly across the entire theoretical acceleration distance
+	  uint16_t unadvance_rate = ( block->advance - fin_advance  ) / decelerate_steps;		   // spread the advance evenly across the entire theoretical deceleration distance
 #endif // EXTRUDER_ADVANCE
 
 	  // block->accelerate_until = accelerate_steps;
@@ -428,11 +431,20 @@ void calculate_trapezoid_for_block(block_t *block, float entry_factor, float exi
 		  block->final_advance   = fin_advance;
 		  // block.advance here is what it would be if full velocity is reached, so we use the nominal steps for each phase, and only as much of 
 		  // each will be applied as there is time and distance for.
-		  block->advance_rate   = ( block->advance - init_advance ) / nominal_accel_steps;		// spread the advance evenly across the entire theoretical acceleration distance
-		  block->unadvance_rate = ( block->advance - fin_advance  ) / decelerate_steps;		   // spread the advance evenly across the entire theoretical deceleration distance
+		  block->advance_rate   = advance_rate;	
+		  block->unadvance_rate = unadvance_rate;		  
 #endif //EXTRUDER_ADVANCE
 		  }
 	  CRITICAL_SECTION_END;
+
+	  SERIAL_ECHO_START;
+	  SERIAL_ECHOPGM("r advance :");  // replan
+	  SERIAL_ECHO(   block->advance );
+	  SERIAL_ECHOPGM(" advance rate :");
+	  SERIAL_ECHOLN( block->advance_rate );
+	  SERIAL_ECHOPGM(" unadvance rate :");
+	  SERIAL_ECHOLN( block->unadvance_rate );
+
 	}
 
 }                    
@@ -901,8 +913,10 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
 
   // Compute and limit the acceleration rate for the trapezoid generator.  
   float steps_per_mm = block->step_event_count/block->millimeters;
-  if(block->steps_x == 0 && block->steps_y == 0 && block->steps_z == 0) {
+  bool bIsOnlyExtrusion = false;
+  if ( block->steps_x == 0 && block->steps_y == 0 && block->steps_z == 0 ) {
     block->acceleration_st = ceil(retract_acceleration * steps_per_mm); // convert to: acceleration steps/sec^2
+	 bIsOnlyExtrusion = true;
   }
   else {
     block->acceleration_st = ceil(acceleration * steps_per_mm); // convert to: acceleration steps/sec^2
@@ -1017,7 +1031,7 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
   block->unadvance_rate = 0;
 
   // Calculate advance 
-  if ( extruder_advance_k == 0 || (block->steps_e == 0) || (block->steps_x == 0 && block->steps_y == 0 && block->steps_z == 0) ) {
+  if ( extruder_advance_k == 0 || (block->steps_e == 0) || bIsOnlyExtrusion ) {
     block->advance = 0;
   }
   else {
@@ -1031,25 +1045,26 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
     block->advance = advance_stepsx256;
 
 	 // do a nominal calculation - if it's replanned they will be revised
-	 long acc_dist = estimate_acceleration_distance_from0( block->nominal_rate, block->acceleration_st );
-    if ( acc_dist > 0 ) {
-	   // this is a differential advance rate, only correct if the initial speed was zero. 
-      block->advance_rate = advance_stepsx256 / acc_dist;		// spread the advance evenly across the entire acceleration distance
-		block->unadvance_rate = block->advance_rate;
+	 if ( block->acceleration_st > 0 ) {
+		 uint32_t acc_dist = estimate_acceleration_distance_from0( block->nominal_rate, block->acceleration_st );
+		 if ( acc_dist != 0 ) {
+			// this is a differential advance rate, only correct if the initial speed was zero. 
+			block->advance_rate = advance_stepsx256 / acc_dist;		// spread the advance evenly across the entire acceleration distance
+			block->unadvance_rate = block->advance_rate;
+		 }
     }
 
   }
-  /*
-    SERIAL_ECHO_START;
-   SERIAL_ECHOPGM("advance :");
-   SERIAL_ECHO(block->advance/256.0);
-   SERIAL_ECHOPGM("advance rate :");
-   SERIAL_ECHOLN(block->advance_rate/256.0);
-   */
+  
+   SERIAL_ECHO_START;
+   SERIAL_ECHOPGM("i advance :");
+   SERIAL_ECHO(block->advance);
+   SERIAL_ECHOPGM(" advance rate :");
+   SERIAL_ECHOLN(block->advance_rate);
+   
 #endif // EXTRUDER_ADVANCE
 
-  calculate_trapezoid_for_block(block, block->entry_speed/block->nominal_speed,
-  safe_speed/block->nominal_speed);
+  calculate_trapezoid_for_block(block, block->entry_speed/block->nominal_speed, safe_speed/block->nominal_speed);
 
   // Move buffer head
   block_buffer_head = next_buffer_head;
