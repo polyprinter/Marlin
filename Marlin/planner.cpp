@@ -414,8 +414,8 @@ void calculate_trapezoid_for_block(block_t *block, float entry_factor, float exi
 #endif
 	  long nominal_accel_steps = accelerate_steps;
 	  // advance rate should really only depend upon the extruder acceleration, not anything else? may not need to be recalculated at all
-	  uint16_t advance_rate   = ( block->advance - init_advance ) / nominal_accel_steps;		// spread the advance evenly across the entire theoretical acceleration distance
-	  uint16_t unadvance_rate = ( block->advance - fin_advance  ) / decelerate_steps;		   // spread the advance evenly across the entire theoretical deceleration distance
+	  //uint16_t advance_rate   = ( block->advance - init_advance ) / nominal_accel_steps;		// spread the advance evenly across the entire theoretical acceleration distance
+	  //uint16_t unadvance_rate = ( block->advance - fin_advance  ) / decelerate_steps;		   // spread the advance evenly across the entire theoretical deceleration distance
 #endif // EXTRUDER_ADVANCE
 
 	  // block->accelerate_until = accelerate_steps;
@@ -441,7 +441,7 @@ void calculate_trapezoid_for_block(block_t *block, float entry_factor, float exi
 	  SERIAL_ECHOPGM("r advance :");  // replan
 	  SERIAL_ECHO(   block->advance );
 	  SERIAL_ECHOPGM(" advance rate :");
-	  SERIAL_ECHOLN( block->advance_rate );
+	  SERIAL_ECHO( block->advance_rate );
 	  SERIAL_ECHOPGM(" unadvance rate :");
 	  SERIAL_ECHOLN( block->unadvance_rate );
 
