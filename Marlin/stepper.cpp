@@ -50,14 +50,19 @@ static long counter_x,       // Counter variables for the Bresenham line tracer
             counter_e;
 volatile static unsigned long step_events_completed; // The number of step events executed in the current block
 #ifdef EXTRUDER_ADVANCE
+#ifdef SPECIFY_ADVANCE_TYPES
   static uint16_t advance_rate = 0;
   static uint16_t unadvance_rate = 0; 
   static int32_t advance = 0;
   static uint32_t final_advance = 0;
   static int32_t old_advance = 0;
+#else
+	static long advance_rate, unadvance_rate, advance, final_advance = 0;
+	static long old_advance = 0;
+#endif
 #endif
 #define Clamp( x, low, hi ) if ( x < low ) { x = low; } else if ( x > hi ) { x = hi; } 
-#define CAREFUL_ADVANCE
+//#define CAREFUL_ADVANCE
 #ifdef CAREFUL_ADVANCE
 const int MAX_ADVANCEx256 = 256 * 200 * 16; // one full turn - way more than ever needed.
 const int MIN_ADVANCE = 0;		 // never go negative
@@ -677,9 +682,14 @@ ISR(TIMER1_COMPA_vect)
 
         //if(advance > current_block->advance) advance = current_block->advance;
         // Do E steps + advance steps
+#ifdef TRY_FASTER_SECTION
 		  uint32_t adv_shifted = advance >> 8; // not sure if this is faster
 		  e_steps[current_block->active_extruder] += (int32_t)(adv_shifted - old_advance);
 		  old_advance = adv_shifted;  
+#else
+		  e_steps[current_block->active_extruder] += ((advance >>8) - old_advance);
+		  old_advance = advance >>8;  
+#endif
  #ifdef DYNAMIC_ADVANCE_OPTION
 		}
  #endif
@@ -709,6 +719,7 @@ ISR(TIMER1_COMPA_vect)
 		if ( doAdvance ) {
 #endif
 			advance -= loops_completed *unadvance_rate;
+#ifdef CAREFUL_UNADVANCE
 			if ( advance < final_advance ) advance = final_advance; // just in case the math went wrong
        // Do E steps + advance steps
 			uint32_t adv_shifted = advance >> 8; // not sure if this is faster
@@ -716,9 +727,14 @@ ISR(TIMER1_COMPA_vect)
 			unsigned short decr = old_advance - adv_shifted;
 			// ensure doesn't go negative, for now
 			if ( e_steps[current_block->active_extruder] >= decr ) {
-				e_steps[current_block->active_extruder] -= old_advance - adv_shifted;
+				e_steps[current_block->active_extruder] -= decr;
 			}
 			old_advance = adv_shifted;  
+#else
+			// no error checking (planning needs to be accurate)
+        e_steps[current_block->active_extruder] += ((advance >>8) - old_advance);
+			old_advance = advance >> 8;
+#endif
 #ifdef DYNAMIC_ADVANCE_OPTION
 			}
 #endif

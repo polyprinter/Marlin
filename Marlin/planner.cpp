@@ -289,8 +289,8 @@ void calculate_trapezoid_for_block(block_t *block, float entry_factor, float exi
 #ifdef EXTRUDER_ADVANCE
 			block->initial_advance = block->advance;
 			block->final_advance   = block->advance;
-			block->advance_rate   = 0;		
-			block->unadvance_rate = 0;		
+			//block->advance_rate   = 0;		
+			//block->unadvance_rate = 0;		
 #endif //EXTRUDER_ADVANCE
 			}
 		CRITICAL_SECTION_END;
@@ -347,7 +347,7 @@ void calculate_trapezoid_for_block(block_t *block, float entry_factor, float exi
 		// Calculate the size of Plateau of Nominal Rate.
 		uint32_t accelerate_steps = estimate_acceleration_distance_precalc( initial_sq, nominal_sq, accel_x2 );
 		int32_t plateau_steps = block->step_event_count - accelerate_steps; // partial result
-	 #ifdef EXTRUDER_ADVANCE
+	 #ifdef EXTRUDER_ADVANCE_NEEDS_DECELSTEPS
 		uint32_t decelerate_steps = estimate_acceleration_distance_precalc( final_sq,   nominal_sq, accel_x2 );   // make sure they're set up for a positive calc result
 		plateau_steps -= decelerate_steps;
 	 #else
@@ -412,7 +412,7 @@ void calculate_trapezoid_for_block(block_t *block, float entry_factor, float exi
 	  long init_advance = block->advance * entry_factor; 
 	  long fin_advance  = block->advance * exit_factor;
 #endif
-	  long nominal_accel_steps = accelerate_steps;
+	  //long nominal_accel_steps = accelerate_steps;
 	  // advance rate should really only depend upon the extruder acceleration, not anything else? may not need to be recalculated at all
 	  //uint16_t advance_rate   = ( block->advance - init_advance ) / nominal_accel_steps;		// spread the advance evenly across the entire theoretical acceleration distance
 	  //uint16_t unadvance_rate = ( block->advance - fin_advance  ) / decelerate_steps;		   // spread the advance evenly across the entire theoretical deceleration distance
