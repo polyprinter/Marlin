@@ -431,8 +431,8 @@ void calculate_trapezoid_for_block(block_t *block, float entry_factor, float exi
 		  block->final_advance   = fin_advance;
 		  // block.advance here is what it would be if full velocity is reached, so we use the nominal steps for each phase, and only as much of 
 		  // each will be applied as there is time and distance for.
-		  block->advance_rate   = advance_rate;	
-		  block->unadvance_rate = unadvance_rate;		  
+		  //block->advance_rate   = advance_rate;	
+		 // block->unadvance_rate = unadvance_rate;		  
 #endif //EXTRUDER_ADVANCE
 		  }
 	  CRITICAL_SECTION_END;
