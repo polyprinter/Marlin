@@ -49,7 +49,8 @@ typedef struct {
 //  float speed_x, speed_y, speed_z, speed_e;        // Nominal mm/sec for each axis
   float nominal_speed;                               // The nominal speed for this block in mm/sec 
   float entry_speed;                                 // Entry speed at previous-current junction in mm/sec
-  float max_entry_speed;                             // Maximum allowable junction entry speed in mm/sec
+  float best_entry_speed;                            // Entry speed at previous-current junction in mm/sec, if previous reached its nominal speed.
+  float max_entry_speed;                             // Maximum allowable junction entry speed in mm/sec, based on being able to decelerate to the final speed using the entire block distance
   float millimeters;                                 // The total travel of this block in mm
   float acceleration;                                // acceleration mm/sec^2
   unsigned char recalculate_flag;                    // Planner flag to recalculate trapezoids on entry junction
@@ -81,9 +82,10 @@ void check_axes_activity();
 uint8_t movesplanned(); //return the nr of buffered moves
 
 extern unsigned long minsegmenttime;
-extern float max_feedrate[4]; // set the max speeds
-extern float axis_steps_per_unit[4];
-extern unsigned long max_acceleration_units_per_sq_second[4]; // Use M201 to override by software
+extern float max_feedrate[NUM_STEPPERS]; // set the max speeds
+extern float max_axis_jerk[NUM_STEPPERS]; // set the max jerks for easy processing
+extern float axis_steps_per_unit[NUM_STEPPERS];
+extern unsigned long max_acceleration_units_per_sq_second[NUM_STEPPERS]; // Use M201 to override by software
 extern float minimumfeedrate;
 extern float acceleration;         // Normal acceleration mm/s^2  THIS IS THE DEFAULT ACCELERATION for all moves. M204 SXXXX
 extern float retract_acceleration; //  mm/s^2   filament pull-pack and push-forward  while standing still in the other axis M204 TXXXX
