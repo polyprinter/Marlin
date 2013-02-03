@@ -1160,6 +1160,10 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
   if ( moves_queued == 0 ) {
 	  // same as DEAD_SIMPLE_JERK
   } else  {
+	  // re-default - we are going to try to do a better job than the defaults
+	  entry_scaling = 1;
+	  best_entry_scaling = 1;
+
 		// needs to be planned out according to what the axes can tolerate
 	  // Plus we have the advantage of looking at what the previous block's speeds are
 		// NOTE: previous algorithms have absolutely counted on a fresh block being re-planned
@@ -1193,11 +1197,33 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
 					axis_jerk_factor = jerk_limited_speed_our_direction / abs( current_speed[a] );
 				}
 				else {
+					if ( extruder_debug_i > 0 ) {
+						SERIAL_ECHO_START;
+						SERIAL_ECHOPGM("clamped jerk, axis:");
+						SERIAL_ECHO( a );
+						SERIAL_ECHOPGM(" oppositeDirections:");
+						SERIAL_ECHOLN( oppositeDirections ? "yes" : "no" );
+					}
 					axis_jerk_factor = 0; // nothing we can do about it.
 				}
 
-				entry_scaling = min( entry_scaling, axis_jerk_factor );
 			 }
+			  if ( extruder_debug_i > 0 ) {
+				  SERIAL_ECHO_START;
+				  SERIAL_ECHOPGM(" axis:");
+				  SERIAL_ECHO( a );
+				  SERIAL_ECHOPGM(" jerk_limit:");
+				  SERIAL_ECHO( jerk_limit );
+				  SERIAL_ECHOPGM(" previous_exit_speed[a]:");
+				  SERIAL_ECHO( previous_exit_speed[a] );
+				  SERIAL_ECHOPGM(" abs_speed_diff:");
+				  SERIAL_ECHO( abs_speed_diff );
+				  SERIAL_ECHOPGM(" axis_jerk_factor:");
+				  SERIAL_ECHOLN( axis_jerk_factor );
+				  }
+
+			 entry_scaling = min( entry_scaling, axis_jerk_factor );
+
 		  }
 
 		  // do a best-case scenario too so the re-planning process can aim for this.
@@ -1218,8 +1244,9 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
 				  else {
 					  axis_jerk_factor = 0; // nothing we can do about it.
 				  }
-			 }
-		    best_entry_scaling = min( best_entry_scaling, axis_jerk_factor );
+			  }
+
+		     best_entry_scaling = min( best_entry_scaling, axis_jerk_factor );
 		  }
 
 	  }
@@ -1297,6 +1324,8 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
 		SERIAL_ECHO(block->max_entry_speed); 
 		SERIAL_ECHOPGM(" best entry:");
 		SERIAL_ECHO(block->best_entry_speed); 
+		SERIAL_ECHOPGM(" v_allowable:");
+		SERIAL_ECHO( v_allowable ); 
 		SERIAL_ECHOPGM(" jun:");
 		SERIAL_ECHO(vmax_junction);
 		SERIAL_ECHOPGM(" nom:");
