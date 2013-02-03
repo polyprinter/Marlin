@@ -1603,6 +1603,7 @@ void MainMenu::showControlMotion()
           else
           {
             max_xy_jerk= encoderpos;
+				max_axis_jerk[X_AXIS] = max_axis_jerk[Y_AXIS] = max_xy_jerk;
             encoderpos=activeline*lcdslow;
               
           }

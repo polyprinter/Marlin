@@ -1329,9 +1329,22 @@ void process_commands()
       if(code_seen('S')) minimumfeedrate = code_value();
       if(code_seen('T')) mintravelfeedrate = code_value();
       if(code_seen('B')) minsegmenttime = code_value() ;
-      if(code_seen('X')) max_xy_jerk = code_value() ;
-      if(code_seen('Z')) max_z_jerk = code_value() ;
-      if(code_seen('E')) max_e_jerk = code_value() ;
+		
+		if (code_seen('X') ) {
+			max_xy_jerk = code_value() ;
+			max_axis_jerk[X_AXIS] = max_axis_jerk[Y_AXIS] = max_xy_jerk;
+			}
+
+		if(code_seen('Z')) {
+			max_z_jerk = code_value() ;
+			max_axis_jerk[Z_AXIS] = max_z_jerk;
+			}
+
+		if(code_seen('E')) {
+			max_e_jerk = code_value() ;
+			max_axis_jerk[E_AXIS] = max_e_jerk;
+			}
+
     }
     break;
     case 206: // M206 additional homeing offset

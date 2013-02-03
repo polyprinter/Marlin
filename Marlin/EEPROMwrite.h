@@ -201,7 +201,10 @@ inline void EEPROM_RetrieveSettings(bool def=false)
         axis_steps_per_unit[i]=tmp1[i];  
         max_feedrate[i]=tmp2[i];  
         max_acceleration_units_per_sq_second[i]=tmp3[i];
+
       }
+
+
       acceleration=DEFAULT_ACCELERATION;
       retract_acceleration=DEFAULT_RETRACT_ACCELERATION;
       minimumfeedrate=DEFAULT_MINIMUMFEEDRATE;
@@ -210,6 +213,11 @@ inline void EEPROM_RetrieveSettings(bool def=false)
       max_xy_jerk=DEFAULT_XYJERK;
       max_z_jerk=DEFAULT_ZJERK;
       max_e_jerk=DEFAULT_EJERK;
+
+		max_axis_jerk[X_AXIS] = max_axis_jerk[Y_AXIS] = max_xy_jerk;
+		max_axis_jerk[Z_AXIS] = max_z_jerk;
+		max_axis_jerk[E_AXIS] = max_e_jerk;
+
 #ifdef EXTRUDER_ADVANCE
 		extruder_advance_k = DEFAULT_EXTRUDER_ADVANCE_K; 
 #endif
