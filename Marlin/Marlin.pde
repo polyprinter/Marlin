@@ -1520,15 +1520,15 @@ void process_commands()
         SERIAL_PROTOCOLLN("");
 			}
 		if (code_seen( 'J' ) ) {
-			extruder_debug_i = code_value();
+			extruder_debug_j = code_value();
 		  SERIAL_PROTOCOL(" J:");
-        SERIAL_PROTOCOL(extruder_debug_i);
+        SERIAL_PROTOCOL(extruder_debug_j);
         SERIAL_PROTOCOLLN("");
 			}
 		if (code_seen( 'K' ) ) {
-			extruder_debug_i = code_value();
+			extruder_debug_k = code_value();
 		  SERIAL_PROTOCOL(" K:");
-        SERIAL_PROTOCOL(extruder_debug_i);
+        SERIAL_PROTOCOL(extruder_debug_k);
         SERIAL_PROTOCOLLN("");
 			}
 
