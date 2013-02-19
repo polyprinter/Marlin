@@ -1046,7 +1046,7 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
   } 
 
   float delta_mm[4];
-  #ifdef ORIGINAL_PLANNER
+  #ifdef ORIGINAL_PLANNER_DELTA
     delta_mm[X_AXIS] = (target[X_AXIS]-position[X_AXIS])/axis_steps_per_unit[X_AXIS];
   delta_mm[Y_AXIS] = (target[Y_AXIS]-position[Y_AXIS])/axis_steps_per_unit[Y_AXIS];
   delta_mm[Z_AXIS] = (target[Z_AXIS]-position[Z_AXIS])/axis_steps_per_unit[Z_AXIS];
@@ -1246,7 +1246,7 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
 
   // Compute and limit the acceleration rate for the trapezoid generator.  
   float steps_per_mm = block->step_event_count/block->millimeters;
-#ifdef ORIGINAL_PLANNER
+#ifdef ORIGINAL_PLANNER_SQRT
   if(block->steps_x == 0 && block->steps_y == 0 && block->steps_z == 0) {
 #else
   if ( bIsOnlyExtrusion ) {
