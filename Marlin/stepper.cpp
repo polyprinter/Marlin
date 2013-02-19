@@ -780,8 +780,8 @@ void HandleExtruderAdvance()
 	{
 	// we only get called once per main step - no fixed timing, but the timing will be more frequent along with increasing speed of the head.
 	// It's not necessarily the best, but it does end up allowing an acceleration type pattern to occur.
-	//const int MAX_E_STEPS_PER_TIMER_TICK = 4; // don't generate a flurry of extra ticks. The stepper can only react to a limited number per millisecond.
-	const int MAX_E_STEPS_PER_TIMER_TICK = 1; // don't generate a flurry of extra ticks. The stepper can only react to a limited number per millisecond.
+	const int MAX_E_STEPS_PER_TIMER_TICK = 4; // don't generate a flurry of extra ticks. The stepper can only react to a limited number per millisecond.
+	//const int MAX_E_STEPS_PER_TIMER_TICK = 1; // don't generate a flurry of extra ticks. The stepper can only react to a limited number per millisecond.
  #endif
  #if MAX_E_STEPS_PER_TIMER_TICK == 1
  #else
