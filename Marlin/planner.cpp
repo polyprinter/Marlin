@@ -908,6 +908,9 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
   block->busy = false;
 
 #ifdef ORIGINAL_PLANNER
+	#undef ORIGINAL_PLANNER_DELTA
+	#define ORIGINAL_PLANNER_DELTA  // must use original delta
+
  // Number of steps for each axis
   block->steps_x = labs(target[X_AXIS]-position[X_AXIS]);
   block->steps_y = labs(target[Y_AXIS]-position[Y_AXIS]);
@@ -948,6 +951,15 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
   block->steps_e = target[E_AXIS]-position[E_AXIS];
   block->steps_e *= extrudemultiply;
   block->steps_e /= 100;
+
+#ifdef ORIGINAL_PLANNER_DELTA
+#else
+  // use the current state of the calcs to set up the correct deltas, instead  of repeating essentially the same thing later
+  delta_mm[X_AXIS] = block->steps_x / axis_steps_per_unit[X_AXIS];
+  delta_mm[Y_AXIS] = block->steps_y / axis_steps_per_unit[Y_AXIS];
+  delta_mm[Z_AXIS] = block->steps_z / axis_steps_per_unit[Z_AXIS];
+  delta_mm[E_AXIS] = block->steps_e / axis_steps_per_unit[E_AXIS];
+#endif
  
   // Compute direction bits for this block and make steps absolute
   block->direction_bits = 0;
@@ -1047,21 +1059,12 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
 
   float delta_mm[4];
   #ifdef ORIGINAL_PLANNER_DELTA
-    delta_mm[X_AXIS] = (target[X_AXIS]-position[X_AXIS])/axis_steps_per_unit[X_AXIS];
+  delta_mm[X_AXIS] = (target[X_AXIS]-position[X_AXIS])/axis_steps_per_unit[X_AXIS];
   delta_mm[Y_AXIS] = (target[Y_AXIS]-position[Y_AXIS])/axis_steps_per_unit[Y_AXIS];
   delta_mm[Z_AXIS] = (target[Z_AXIS]-position[Z_AXIS])/axis_steps_per_unit[Z_AXIS];
   delta_mm[E_AXIS] = ((target[E_AXIS]-position[E_AXIS])/axis_steps_per_unit[E_AXIS])*extrudemultiply/100.0;
   #else
-   //delta_mm[X_AXIS] = (target[X_AXIS]-position[X_AXIS])/axis_steps_per_unit[X_AXIS];
- // delta_mm[Y_AXIS] = (target[Y_AXIS]-position[Y_AXIS])/axis_steps_per_unit[Y_AXIS];
- // delta_mm[Z_AXIS] = (target[Z_AXIS]-position[Z_AXIS])/axis_steps_per_unit[Z_AXIS];
-  //delta_mm[E_AXIS] = ((target[E_AXIS]-position[E_AXIS])/axis_steps_per_unit[E_AXIS])*extrudemultiply/100.0;
-
-  delta_mm[X_AXIS] = block->steps_x / axis_steps_per_unit[X_AXIS];
-  delta_mm[Y_AXIS] = block->steps_y / axis_steps_per_unit[Y_AXIS];
-  delta_mm[Z_AXIS] = block->steps_z / axis_steps_per_unit[Z_AXIS];
-  delta_mm[E_AXIS] = block->steps_e / axis_steps_per_unit[E_AXIS];
-
+	// done above
   #endif
   
   #ifdef ORIGINAL_PLANNER_SQRT
