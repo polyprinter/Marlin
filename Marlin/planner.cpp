@@ -1200,9 +1200,9 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
   float speed_factor = 1.0; //factor <=1 do decrease speed
   for(int i=0; i < 4; i++) {
     cur_nominal_axis_speed[i] = delta_mm[i] * inverse_second;
-	 cur_nominal_axis_absSpeed = fabs( cur_nominal_axis_speed[i] );
-	 if ( cur_nominal_axis_absSpeed > max_feedrate[i] ) {
-      speed_factor = min( speed_factor, max_feedrate[i] / cur_nominal_axis_absSpeed );
+	 cur_nominal_axis_absSpeed[i] = fabs( cur_nominal_axis_speed[i] );
+	 if ( cur_nominal_axis_absSpeed[i] > max_feedrate[i] ) {
+      speed_factor = min( speed_factor, max_feedrate[i] / cur_nominal_axis_absSpeed[i] );
 	 }
   }
 
@@ -1240,7 +1240,7 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
   if( speed_factor < 1.0) {
     for(unsigned char i=0; i < 4; i++) {
       cur_nominal_axis_speed[i] *= speed_factor;
-		cur_nominal_axis_absSpeed = fabs( cur_nominal_axis_speed[i] );
+		cur_nominal_axis_absSpeed[i] = fabs( cur_nominal_axis_speed[i] );
     }
     block->nominal_speed *= speed_factor;
     block->nominal_rate *= speed_factor;
