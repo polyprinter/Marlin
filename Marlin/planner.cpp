@@ -153,6 +153,13 @@ static int8_t prev_block_index(int8_t block_index) {
 //===========================================================================
 //=============================functions         ============================
 //===========================================================================
+#ifdef EXTRUDER_ADVANCE
+FORCE_INLINE uint32_t estimate_acceleration_distance_from0( uint32_t target_rate, uint32_t acceleration )
+	{
+	return ( ( target_rate * target_rate ) / ( 2 * acceleration ) );
+	}
+
+#endif
 
 // Calculates the distance (not time) it takes to accelerate from initial_rate to target_rate using the 
 // given acceleration:
@@ -212,18 +219,12 @@ FORCE_INLINE float max_allowable_speed(float acceleration, float target_velocity
 		}
 	}
 */
+
 // using uint should be good up till 65,535 steps/sec
 FORCE_INLINE uint32_t estimate_acceleration_distance_precalc( uint32_t initial_rate_sq, uint32_t target_rate_sq, uint32_t acceleration_x2 )
 	{
 	return ( ( target_rate_sq - initial_rate_sq ) / acceleration_x2 );
 	}
-
-
-FORCE_INLINE uint32_t estimate_acceleration_distance_from0( uint32_t target_rate, uint32_t acceleration )
-	{
-	return ( ( target_rate * target_rate ) / ( 2 * acceleration ) );
-	}
-
 
 // This function gives you the point at which you must start braking (at the rate of -acceleration) if 
 // you started at speed initial_rate and accelerated until this point and want to end at the final_rate after
