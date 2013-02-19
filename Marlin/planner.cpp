@@ -1089,7 +1089,7 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
 		  // no X move
 		  if ( block->steps_y <= dropsegments ) {
 			  // no Y either
-			  block->millimeters = delta_mm[Z_AXIS];
+			  block->millimeters = fabs( delta_mm[Z_AXIS] );
 		  }
 		  else {
 			  // no X but Y and Z. Very rare. OK to use sqrt.
