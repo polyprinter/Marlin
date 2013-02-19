@@ -154,11 +154,13 @@ static int8_t prev_block_index(int8_t block_index) {
 //=============================functions         ============================
 //===========================================================================
 #ifdef EXTRUDER_ADVANCE
+#ifdef FLOAT_ESTIMATES
+#else
 FORCE_INLINE uint32_t estimate_acceleration_distance_from0( uint32_t target_rate, uint32_t acceleration )
 	{
 	return ( ( target_rate * target_rate ) / ( 2 * acceleration ) );
 	}
-
+#endif
 #endif
 
 // Calculates the distance (not time) it takes to accelerate from initial_rate to target_rate using the 
@@ -322,7 +324,7 @@ void calculate_trapezoid_for_block(block_t *block, float entry_factor, float exi
   int32_t decelerate_steps =
     floor(estimate_acceleration_distance(block->nominal_rate, block->final_rate, -acceleration));
 
-#ifdef ADVANCE
+#ifdef EXTRUDER_ADVANCE
  #ifdef ADVANCE_WITH_SQUARE_LAW
   long init_advance = block->advance*entry_factor*entry_factor; 
   long fin_advance  = block->advance*exit_factor*exit_factor;
@@ -333,7 +335,7 @@ void calculate_trapezoid_for_block(block_t *block, float entry_factor, float exi
  #endif
   long nominal_accel_steps = accelerate_steps;
   long nominal_decel_steps = decelerate_steps;
-#endif // ADVANCE
+#endif // EXTRUDER_ADVANCE
 
   // Calculate the size of Plateau of Nominal Rate.
   int32_t plateau_steps = block->step_event_count - accelerate_steps-decelerate_steps;
@@ -357,14 +359,14 @@ void calculate_trapezoid_for_block(block_t *block, float entry_factor, float exi
     block->decelerate_after = accelerate_steps + plateau_steps;
     block->initial_rate = initial_rate;
     block->final_rate   = final_rate;
-#ifdef ADVANCE
+#ifdef EXTRUDER_ADVANCE
     block->initial_advance = init_advance;
     block->final_advance   = fin_advance;
 	 // block.advance here is what it would be if full velocity is reached, so we use the nominal steps for each phase, and only as much of 
 	 // each will be applied as there is time and distance for.
 	 block->advance_rate   = ( block->advance - init_advance ) / (float)nominal_accel_steps;		// spread the advance evenly across the entire acceleration distance
 	 block->unadvance_rate = ( block->advance - fin_advance  ) / (float)nominal_decel_steps;		// spread the advance evenly across the entire acceleration distance
-#endif //ADVANCE
+#endif // EXTRUDER_ADVANCE
   }
   CRITICAL_SECTION_END;
 #else
@@ -1654,15 +1656,26 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
  #endif
     block->advance = advance_stepsx256;
 
+#ifdef FLOAT_ESTIMATES
+	 long acc_dist = estimate_acceleration_distance( 0, block->nominal_rate, block->acceleration_st );
+	 if ( acc_dist > 0 ) {
+		 // this is a differential advance rate, only correct if the initial speed was zero. 
+		 block->advance_rate   = advance_stepsx256 / (float)acc_dist;		// spread the advance evenly across the entire acceleration distance
+		 block->unadvance_rate = block->advance_rate;
+	 }
+#else
+
 	 // do a nominal calculation - if it's replanned they will be revised
 	 if ( block->acceleration_st > 0 ) {
 		 uint32_t acc_dist = estimate_acceleration_distance_from0( block->nominal_rate, block->acceleration_st );
 		 if ( acc_dist != 0 ) {
 			// this is a differential advance rate, only correct if the initial speed was zero. 
-			block->advance_rate = advance_stepsx256 / acc_dist;		// spread the advance evenly across the entire acceleration distance
+			block->advance_rate   = advance_stepsx256 / acc_dist;		// spread the advance evenly across the entire acceleration distance
 			block->unadvance_rate = block->advance_rate;
-		 }
-    }
+		  }
+
+     }
+#endif
 
   }
   
