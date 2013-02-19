@@ -1195,12 +1195,15 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
   block->nominal_rate = ceil(block->step_event_count * inverse_second); // (step/sec) Always > 0
 
   // Calculate and limit speed in mm/sec for each axis
-  float current_speed[4];
+  float cur_nominal_axis_speed[4];
+  float cur_nominal_axis_absSpeed[4];
   float speed_factor = 1.0; //factor <=1 do decrease speed
   for(int i=0; i < 4; i++) {
-    current_speed[i] = delta_mm[i] * inverse_second;
-    if(fabs(current_speed[i]) > max_feedrate[i])
-      speed_factor = min(speed_factor, max_feedrate[i] / fabs(current_speed[i]));
+    cur_nominal_axis_speed[i] = delta_mm[i] * inverse_second;
+	 cur_nominal_axis_absSpeed = fabs( cur_nominal_axis_speed[i] );
+	 if ( cur_nominal_axis_absSpeed > max_feedrate[i] ) {
+      speed_factor = min( speed_factor, max_feedrate[i] / cur_nominal_axis_absSpeed );
+	 }
   }
 
   // Max segement time in us.
@@ -1236,7 +1239,8 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
   // Correct the speed  
   if( speed_factor < 1.0) {
     for(unsigned char i=0; i < 4; i++) {
-      current_speed[i] *= speed_factor;
+      cur_nominal_axis_speed[i] *= speed_factor;
+		cur_nominal_axis_absSpeed = fabs( cur_nominal_axis_speed[i] );
     }
     block->nominal_speed *= speed_factor;
     block->nominal_rate *= speed_factor;
@@ -1311,26 +1315,26 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
   // Start with a safe speed
   float vmax_junction = max_xy_jerk/2; 
   float vmax_junction_factor = 1.0; 
-  if(fabs(current_speed[Z_AXIS]) > max_z_jerk/2) 
+  if(fabs(cur_nominal_axis_speed[Z_AXIS]) > max_z_jerk/2) 
     vmax_junction = min(vmax_junction, max_z_jerk/2);
-  if(fabs(current_speed[E_AXIS]) > max_e_jerk/2) 
+  if(fabs(cur_nominal_axis_speed[E_AXIS]) > max_e_jerk/2) 
     vmax_junction = min(vmax_junction, max_e_jerk/2);
   vmax_junction = min(vmax_junction, block->nominal_speed);
   float safe_exit_speed = vmax_junction;
 
   if ((moves_queued > 1) && (previous_nominal_speed > 0.0001)) {
-    float jerk = sqrt(pow((current_speed[X_AXIS]-previous_speed[X_AXIS]), 2)+pow((current_speed[Y_AXIS]-previous_speed[Y_AXIS]), 2));
+    float jerk = sqrt(pow((cur_nominal_axis_speed[X_AXIS]-previous_speed[X_AXIS]), 2)+pow((cur_nominal_axis_speed[Y_AXIS]-previous_speed[Y_AXIS]), 2));
     //    if((fabs(previous_speed[X_AXIS]) > 0.0001) || (fabs(previous_speed[Y_AXIS]) > 0.0001)) {
     vmax_junction = block->nominal_speed;
     //    }
     if (jerk > max_xy_jerk) {
       vmax_junction_factor = (max_xy_jerk/jerk);
     } 
-    if(fabs(current_speed[Z_AXIS] - previous_speed[Z_AXIS]) > max_z_jerk) {
-      vmax_junction_factor= min(vmax_junction_factor, (max_z_jerk/fabs(current_speed[Z_AXIS] - previous_speed[Z_AXIS])));
+    if(fabs(cur_nominal_axis_speed[Z_AXIS] - previous_speed[Z_AXIS]) > max_z_jerk) {
+      vmax_junction_factor= min(vmax_junction_factor, (max_z_jerk/fabs(cur_nominal_axis_speed[Z_AXIS] - previous_speed[Z_AXIS])));
     } 
-    if(fabs(current_speed[E_AXIS] - previous_speed[E_AXIS]) > max_e_jerk) {
-      vmax_junction_factor = min(vmax_junction_factor, (max_e_jerk/fabs(current_speed[E_AXIS] - previous_speed[E_AXIS])));
+    if(fabs(cur_nominal_axis_speed[E_AXIS] - previous_speed[E_AXIS]) > max_e_jerk) {
+      vmax_junction_factor = min(vmax_junction_factor, (max_e_jerk/fabs(cur_nominal_axis_speed[E_AXIS] - previous_speed[E_AXIS])));
     } 
     vmax_junction = min(previous_nominal_speed, vmax_junction * vmax_junction_factor); // Limit speed to max previous speed
   }
@@ -1349,7 +1353,7 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
   // set up default entry and exit parameters too
   for ( uint8_t a=0; a < NUM_STEPPERS; ++a ) {
 	  // assume this is the only block
-	  float abs_speed_diff = abs( current_speed[a] );
+	  float abs_speed_diff = abs( cur_nominal_axis_speed[a] );
 
 	  // we should be able to enter and leave with full jerk, because normally any adjoining block will look at the direction and speed we leave at.
 	  // If we're setting the safe default entry scaling from this, then that won't be true, so make sure we default
@@ -1402,21 +1406,21 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
 		  // There's still no guarantee that this and the previous block have not been so very short that
 		  // two (or any number) of legal jerks in quick succession will not add up to an unacceptable total jerk. But perhaps that can be covered
 		  // by managing it some other way. (See if nominal is higher? Check length of this segment, set exit even lower if really short?)
-		  float abs_speed_diff = abs( current_speed[a] - previous_exit_speed[a] );
+		  float abs_speed_diff = abs( cur_nominal_axis_speed[a] - previous_exit_speed[a] );
 		  float jerk_limit =  max_axis_jerk[a];
 		  if ( abs_speed_diff > jerk_limit ) {
 			  // if the previous speed was the opposite sign, our needed scaling is actually potentially zero
 			  // allowable speed:
 			  float axis_jerk_factor = jerk_limit / abs_speed_diff; // assume same direction  - very likely
 			  // but check for a change in direction
-			  bool oppositeDirections = ( current_speed[a] * previous_exit_speed[a] < 0 );
+			  bool oppositeDirections = ( cur_nominal_axis_speed[a] * previous_exit_speed[a] < 0 );
 			  if ( oppositeDirections ) {
 			   // do an absolute calculation of the allowed positive speed we can enter with, if the
 			   // previous exit speed is taken as negative, and we add the allowed jerk to it.
 				float jerk_limited_speed_our_direction = 0 - abs( previous_exit_speed[a] ) + max_axis_jerk[a];
 				// now we can determine a scaling factor, watching out for whether it really wants to be negative (which we will not handle)
 				if ( jerk_limited_speed_our_direction >= 0  ) {
-					axis_jerk_factor = jerk_limited_speed_our_direction / abs( current_speed[a] );
+					axis_jerk_factor = jerk_limited_speed_our_direction / abs( cur_nominal_axis_speed[a] );
 				}
 				else {
 #ifdef DEBUG_VARS
@@ -1453,18 +1457,18 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
 
 		  // do a best-case scenario too so the re-planning process can aim for this.
 		  // This is not the end of the story, though, because there is still another calculation of the max entry based on decelerating to the end speed in the block distance
-		  float best_abs_speed_diff = abs( current_speed[a] - previous_speed[a] );
+		  float best_abs_speed_diff = abs( cur_nominal_axis_speed[a] - previous_speed[a] );
 		  if ( best_abs_speed_diff > jerk_limit ) {
 			  float axis_jerk_factor = jerk_limit / best_abs_speed_diff;
 			  // if the previous speed was the opposite sign, our needed scaling is actually potentially zero
-			  bool oppositeDirections = ( current_speed[a] * previous_speed[a] < 0 );
+			  bool oppositeDirections = ( cur_nominal_axis_speed[a] * previous_speed[a] < 0 );
 			  if ( oppositeDirections ) {
 				  // do an absolute calculation of the allowed positive speed we can enter with, if the
 				  // previous nominal speed is taken as negative, and we add the allowed jerk to it.
 				  float jerk_limited_speed_our_direction = 0 - abs( previous_speed[a] ) + max_axis_jerk[a];
 				  // now we can determine a scaling factor, watching out for whether it really wants to be negative (which we will not handle)
 				  if ( jerk_limited_speed_our_direction >= 0  ) {
-					  axis_jerk_factor = jerk_limited_speed_our_direction / abs( current_speed[a] );
+					  axis_jerk_factor = jerk_limited_speed_our_direction / abs( cur_nominal_axis_speed[a] );
 				  }
 				  else {
 					  axis_jerk_factor = 0; // nothing we can do about it.
@@ -1486,28 +1490,28 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
   float vmax_junction = max_xy_jerk/2; 
   float vmax_junction_factor = 1.0; 
 
-  if(fabs(current_speed[Z_AXIS]) > max_z_jerk/2) 
+  if(fabs(cur_nominal_axis_speed[Z_AXIS]) > max_z_jerk/2) 
     vmax_junction = min(vmax_junction, max_z_jerk/2);
 
-  if(fabs(current_speed[E_AXIS]) > max_e_jerk/2) 
+  if(fabs(cur_nominal_axis_speed[E_AXIS]) > max_e_jerk/2) 
     vmax_junction = min(vmax_junction, max_e_jerk/2);
 
   vmax_junction = min(vmax_junction, block->nominal_speed);
   safe_exit_speed = vmax_junction;
 
   if ((moves_queued > 1) && (previous_nominal_speed > 0.0001)) {
-    float jerk = sqrt(pow((current_speed[X_AXIS]-previous_speed[X_AXIS]), 2)+pow((current_speed[Y_AXIS]-previous_speed[Y_AXIS]), 2));
+    float jerk = sqrt(pow((cur_nominal_axis_speed[X_AXIS]-previous_speed[X_AXIS]), 2)+pow((cur_nominal_axis_speed[Y_AXIS]-previous_speed[Y_AXIS]), 2));
     //    if((fabs(previous_speed[X_AXIS]) > 0.0001) || (fabs(previous_speed[Y_AXIS]) > 0.0001)) {
     vmax_junction = block->nominal_speed;
     //    }
     if (jerk > max_xy_jerk) {
       vmax_junction_factor = (max_xy_jerk/jerk);
     } 
-    if(fabs(current_speed[Z_AXIS] - previous_speed[Z_AXIS]) > max_z_jerk) {
-      vmax_junction_factor= min(vmax_junction_factor, (max_z_jerk/fabs(current_speed[Z_AXIS] - previous_speed[Z_AXIS])));
+    if(fabs(cur_nominal_axis_speed[Z_AXIS] - previous_speed[Z_AXIS]) > max_z_jerk) {
+      vmax_junction_factor= min(vmax_junction_factor, (max_z_jerk/fabs(cur_nominal_axis_speed[Z_AXIS] - previous_speed[Z_AXIS])));
     } 
-    if(fabs(current_speed[E_AXIS] - previous_speed[E_AXIS]) > max_e_jerk) {
-      vmax_junction_factor = min(vmax_junction_factor, (max_e_jerk/fabs(current_speed[E_AXIS] - previous_speed[E_AXIS])));
+    if(fabs(cur_nominal_axis_speed[E_AXIS] - previous_speed[E_AXIS]) > max_e_jerk) {
+      vmax_junction_factor = min(vmax_junction_factor, (max_e_jerk/fabs(cur_nominal_axis_speed[E_AXIS] - previous_speed[E_AXIS])));
     } 
     vmax_junction = min(previous_nominal_speed, vmax_junction * vmax_junction_factor); // Limit speed to max previous speed
 	 entry_scaling = vmax_junction_factor;
@@ -1624,7 +1628,7 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
 
 
   // Update previous path unit_vector and nominal speed
-  memcpy(previous_speed, current_speed, sizeof(previous_speed)); // previous_speed[] = current_speed[]
+  memcpy(previous_speed, cur_nominal_axis_speed, sizeof(previous_speed)); // previous_speed[] = cur_nominal_axis_speed[]
   previous_nominal_speed = block->nominal_speed;
 
 
@@ -1639,12 +1643,12 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
     block->advance = 0;
   }
   else {
-	 //float advance = (STEPS_PER_CUBIC_MM_E * EXTRUDER_ADVANCE_K) * (current_speed[E_AXIS] * current_speed[E_AXIS] * EXTRUSION_AREA * EXTRUSION_AREA ) * 256;
+	 //float advance = (STEPS_PER_CUBIC_MM_E * EXTRUDER_ADVANCE_K) * (cur_nominal_axis_speed[E_AXIS] * cur_nominal_axis_speed[E_AXIS] * EXTRUSION_AREA * EXTRUSION_AREA ) * 256;
  #ifdef ADVANCE_WITH_SQUARE_LAW
-	 float advance_stepsx256 = (STEPS_PER_CUBIC_MM_E * extruder_advance_k) * ( current_speed[E_AXIS] * current_speed[E_AXIS] * EXTRUSION_AREA ) * 256;
+	 float advance_stepsx256 = (STEPS_PER_CUBIC_MM_E * extruder_advance_k) * ( cur_nominal_axis_speed[E_AXIS] * cur_nominal_axis_speed[E_AXIS] * EXTRUSION_AREA ) * 256;
  #else
 	 // it seems to over-advance if we use the square of the speed - higher speeds needed lower constants, by a large factor
-	 float advance_stepsx256 = (STEPS_PER_CUBIC_MM_E * extruder_advance_k) * ( current_speed[E_AXIS] * EXTRUSION_AREA ) * 256;
+	 float advance_stepsx256 = (STEPS_PER_CUBIC_MM_E * extruder_advance_k) * ( cur_nominal_axis_speed[E_AXIS] * EXTRUSION_AREA ) * 256;
  #endif
     block->advance = advance_stepsx256;
 
@@ -1673,15 +1677,21 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
 #define TRACE_ADVANCE  
  #ifdef TRACE_ADVANCE
   SERIAL_ECHO_START;
-   SERIAL_ECHOPGM("i advance :");
+   SERIAL_ECHOPGM("i adv:");
    SERIAL_ECHO(block->advance);
-   SERIAL_ECHOPGM(" accel dist :");
+   SERIAL_ECHOPGM(" nom:");
+	SERIAL_ECHO(block->nominal_rate);
+	SERIAL_ECHOPGM(" acc:");
+	SERIAL_ECHO(block->acceleration_st);
+	SERIAL_ECHOPGM(" bldist:");
+	SERIAL_ECHO(block->millimeters);
+	SERIAL_ECHOPGM(" accdist:");
 	{
 	long acc_distx = estimate_acceleration_distance( 0, block->nominal_rate, block->acceleration_st );
 	SERIAL_ECHO(acc_distx);
 	}
 
-	SERIAL_ECHOPGM(" advance rate :");
+	SERIAL_ECHOPGM(" advrate:");
    SERIAL_ECHOLN(block->advance_rate);
  #endif
 #endif // EXTRUDER_ADVANCE
