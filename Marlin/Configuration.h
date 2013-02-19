@@ -331,7 +331,7 @@ const bool Z_ENDSTOPS_INVERTING = false; // set to true to invert the logic of t
 
 //#define DEAD_SIMPLE_JERK
 
-//#define EXTRUDER_ADVANCE
+#define EXTRUDER_ADVANCE
 //#define DYNAMIC_ADVANCE_OPTION // has overheads, but it's probably necessary to have run-time control over its presence during testing
 //#define ADVANCE_HAS_OWN_INTERRUPT_SERVICE_ROUTINE // seems to cause problems, very rough running
 
