@@ -254,11 +254,11 @@ const bool Z_ENDSTOPS_INVERTING = false; // set to true to invert the logic of t
 #define Y_MAX_POS 533
 #define Y_MIN_POS 0
 #else
-#define Y_MAX_POS 230  // 229 spec, 2mm to spare
+#define Y_MAX_POS 231  // 229 spec, 2mm to spare
 #define Y_MIN_POS 0
 #endif
 
-#define Z_MAX_POS 235
+#define Z_MAX_POS 247
 #define Z_MIN_POS 0
 
 #define X_MAX_LENGTH (X_MAX_POS - X_MIN_POS)
@@ -320,11 +320,19 @@ const bool Z_ENDSTOPS_INVERTING = false; // set to true to invert the logic of t
 //=============================Additional Features===========================
 //===========================================================================
 
-#define EXTRUDER_ADVANCE
+#define FLOAT_ESTIMATES  // defining this will cause the older slow float functions to be used instead of the newer faster int calcs
+#define ORIGINAL_TRAPEZOID  // defining this will revert the trapezoid calcs to the original method
+#define ORIGINAL_PLANNER // defining this will revert planning decisions to the original methods
+#define ALLOW_JERK
+//#define ALTERNATIVE_JERK 
+
+//#define DEAD_SIMPLE_JERK
+
+//#define EXTRUDER_ADVANCE
 //#define DYNAMIC_ADVANCE_OPTION // has overheads, but it's probably necessary to have run-time control over its presence during testing
 //#define ADVANCE_HAS_OWN_INTERRUPT_SERVICE_ROUTINE // seems to cause problems, very rough running
 
-#define VARY_ACCEL_WITH_Z
+//#define VARY_ACCEL_WITH_Z
 
 // EEPROM
 // the microcontroller can store settings in the EEPROM, e.g. max velocity...
