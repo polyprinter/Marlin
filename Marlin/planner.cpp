@@ -362,10 +362,6 @@ void calculate_trapezoid_for_block(block_t *block, float entry_factor, float exi
 #ifdef EXTRUDER_ADVANCE
     block->initial_advance = init_advance;
     block->final_advance   = fin_advance;
-	 // block.advance here is what it would be if full velocity is reached, so we use the nominal steps for each phase, and only as much of 
-	 // each will be applied as there is time and distance for.
-	 block->advance_rate   = ( block->advance - init_advance ) / (float)nominal_accel_steps;		// spread the advance evenly across the entire acceleration distance
-	 block->unadvance_rate = ( block->advance - fin_advance  ) / (float)nominal_decel_steps;		// spread the advance evenly across the entire acceleration distance
 #endif // EXTRUDER_ADVANCE
   }
   CRITICAL_SECTION_END;
@@ -515,10 +511,6 @@ void calculate_trapezoid_for_block(block_t *block, float entry_factor, float exi
 	  long init_advance = block->advance * entry_factor; 
 	  long fin_advance  = block->advance * exit_factor;
 #endif
-	  //long nominal_accel_steps = accelerate_steps;
-	  // advance rate should really only depend upon the extruder acceleration, not anything else? may not need to be recalculated at all
-	  //uint16_t advance_rate   = ( block->advance - init_advance ) / nominal_accel_steps;		// spread the advance evenly across the entire theoretical acceleration distance
-	  //uint16_t unadvance_rate = ( block->advance - fin_advance  ) / decelerate_steps;		   // spread the advance evenly across the entire theoretical deceleration distance
 #endif // EXTRUDER_ADVANCE
 
 	  // block->accelerate_until = accelerate_steps;
@@ -1678,12 +1670,18 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
 #endif
 
   }
-  
+#define TRACE_ADVANCE  
  #ifdef TRACE_ADVANCE
   SERIAL_ECHO_START;
    SERIAL_ECHOPGM("i advance :");
    SERIAL_ECHO(block->advance);
-   SERIAL_ECHOPGM(" advance rate :");
+   SERIAL_ECHOPGM(" accel dist :");
+	{
+	long acc_distx = estimate_acceleration_distance( 0, block->nominal_rate, block->acceleration_st );
+	SERIAL_ECHO(acc_distx);
+	}
+
+	SERIAL_ECHOPGM(" advance rate :");
    SERIAL_ECHOLN(block->advance_rate);
  #endif
 #endif // EXTRUDER_ADVANCE
