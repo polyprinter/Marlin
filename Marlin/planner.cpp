@@ -1051,6 +1051,21 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
   delta_mm[Y_AXIS] = (target[Y_AXIS]-position[Y_AXIS])/axis_steps_per_unit[Y_AXIS];
   delta_mm[Z_AXIS] = (target[Z_AXIS]-position[Z_AXIS])/axis_steps_per_unit[Z_AXIS];
   delta_mm[E_AXIS] = ((target[E_AXIS]-position[E_AXIS])/axis_steps_per_unit[E_AXIS])*extrudemultiply/100.0;
+  #else
+   //delta_mm[X_AXIS] = (target[X_AXIS]-position[X_AXIS])/axis_steps_per_unit[X_AXIS];
+ // delta_mm[Y_AXIS] = (target[Y_AXIS]-position[Y_AXIS])/axis_steps_per_unit[Y_AXIS];
+ // delta_mm[Z_AXIS] = (target[Z_AXIS]-position[Z_AXIS])/axis_steps_per_unit[Z_AXIS];
+  //delta_mm[E_AXIS] = ((target[E_AXIS]-position[E_AXIS])/axis_steps_per_unit[E_AXIS])*extrudemultiply/100.0;
+
+  delta_mm[X_AXIS] = block->steps_x / axis_steps_per_unit[X_AXIS];
+  delta_mm[Y_AXIS] = block->steps_y / axis_steps_per_unit[Y_AXIS];
+  delta_mm[Z_AXIS] = block->steps_z / axis_steps_per_unit[Z_AXIS];
+  delta_mm[E_AXIS] = block->steps_e / axis_steps_per_unit[E_AXIS];
+
+  #endif
+  
+  #ifdef ORIGINAL_PLANNER_SQRT
+  
   if ( block->steps_x <=dropsegments && block->steps_y <=dropsegments && block->steps_z <=dropsegments ) {
     block->millimeters = fabs(delta_mm[E_AXIS]);
   } 
@@ -1061,16 +1076,7 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
 
   #else
   
-  //delta_mm[X_AXIS] = (target[X_AXIS]-position[X_AXIS])/axis_steps_per_unit[X_AXIS];
- // delta_mm[Y_AXIS] = (target[Y_AXIS]-position[Y_AXIS])/axis_steps_per_unit[Y_AXIS];
- // delta_mm[Z_AXIS] = (target[Z_AXIS]-position[Z_AXIS])/axis_steps_per_unit[Z_AXIS];
-  //delta_mm[E_AXIS] = ((target[E_AXIS]-position[E_AXIS])/axis_steps_per_unit[E_AXIS])*extrudemultiply/100.0;
-
-  delta_mm[X_AXIS] = block->steps_x / axis_steps_per_unit[X_AXIS];
-  delta_mm[Y_AXIS] = block->steps_y / axis_steps_per_unit[Y_AXIS];
-  delta_mm[Z_AXIS] = block->steps_z / axis_steps_per_unit[Z_AXIS];
-  delta_mm[E_AXIS] = block->steps_e / axis_steps_per_unit[E_AXIS];
-
+ 
   bool bIsOnlyExtrusion = false;
 #define POW2( x ) ( x * x )
   if ( block->steps_x <= dropsegments && block->steps_y <= dropsegments && block->steps_z <= dropsegments ) {
@@ -1089,7 +1095,7 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
 			  // no X but Y and Z. Very rare. OK to use sqrt.
 			  if ( block->steps_z <= dropsegments) {
 				  // no X nor Z
-				  block->millimeters = delta_mm[Y_AXIS];
+				  block->millimeters = fabs( delta_mm[Y_AXIS] );
 				  }
 			  else {
 				  block->millimeters = sqrt( POW2(delta_mm[Y_AXIS]) + POW2(delta_mm[Z_AXIS]) );
@@ -1103,7 +1109,7 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
 			  if ( block->steps_z <= dropsegments ) {
 				  // or Z
 				  // it's just X
-				  block->millimeters = delta_mm[X_AXIS];
+				  block->millimeters = fabs( delta_mm[X_AXIS] );
 				}
 			  else {
 				  // X and Z only (rare)
