@@ -49,7 +49,10 @@ typedef struct {
 //  float speed_x, speed_y, speed_z, speed_e;        // Nominal mm/sec for each axis
   float nominal_speed;                               // The nominal speed for this block in mm/sec 
   float entry_speed;                                 // Entry speed at previous-current junction in mm/sec
+#ifdef ORIGINAL_PLANNER
+#else
   float best_entry_speed;                            // Entry speed at previous-current junction in mm/sec, if previous reached its nominal speed.
+#endif  
   float max_entry_speed;                             // Maximum allowable junction entry speed in mm/sec, based on being able to decelerate to the final speed using the entire block distance
   float millimeters;                                 // The total travel of this block in mm
   float acceleration;                                // acceleration mm/sec^2
@@ -83,7 +86,10 @@ uint8_t movesplanned(); //return the nr of buffered moves
 
 extern unsigned long minsegmenttime;
 extern float max_feedrate[NUM_STEPPERS]; // set the max speeds
+#ifdef ORIGINAL_PLANNER
+#else
 extern float max_axis_jerk[NUM_STEPPERS]; // set the max jerks for easy processing
+#endif
 extern float axis_steps_per_unit[NUM_STEPPERS];
 extern unsigned long max_acceleration_units_per_sq_second[NUM_STEPPERS]; // Use M201 to override by software
 extern float minimumfeedrate;
@@ -97,6 +103,8 @@ extern unsigned long axis_steps_per_sqr_second[NUM_AXIS];
 
 #ifdef EXTRUDER_ADVANCE
 extern float extruder_advance_k;
+#endif
+#ifdef DEBUG_VARS
 extern int extruder_debug_i;
 extern int extruder_debug_j;
 extern int extruder_debug_k;

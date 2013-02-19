@@ -210,13 +210,16 @@ inline void EEPROM_RetrieveSettings(bool def=false)
       minimumfeedrate=DEFAULT_MINIMUMFEEDRATE;
       minsegmenttime=DEFAULT_MINSEGMENTTIME;       
       mintravelfeedrate=DEFAULT_MINTRAVELFEEDRATE;
+
+#ifdef ORIGINAL_PLANNER
       max_xy_jerk=DEFAULT_XYJERK;
       max_z_jerk=DEFAULT_ZJERK;
       max_e_jerk=DEFAULT_EJERK;
-
+#else
 		max_axis_jerk[X_AXIS] = max_axis_jerk[Y_AXIS] = max_xy_jerk;
 		max_axis_jerk[Z_AXIS] = max_z_jerk;
 		max_axis_jerk[E_AXIS] = max_e_jerk;
+#endif
 
 #ifdef EXTRUDER_ADVANCE
 		extruder_advance_k = DEFAULT_EXTRUDER_ADVANCE_K; 
