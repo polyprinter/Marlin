@@ -460,7 +460,6 @@ void calculate_trapezoid_for_block(block_t *block, float entry_factor, float exi
 	#else
 		 //accelerate_steps = intersection_distance( block->initial_rate, block->final_rate, acceleration, block->step_event_count );
 		 int32_t intersect_steps = intersection_distance_precalc( initial_sq, final_sq, accel_x2, block->step_event_count );
-#define trace_unachievables
 #ifdef trace_unachievables
 		 const int32_t TRACE_THRESHOLD_ERROR = 1000;
 		 const int32_t TRACE_THRESHOLD_ERROR_UPPER = (int32_t)( block->step_event_count + TRACE_THRESHOLD_ERROR );
