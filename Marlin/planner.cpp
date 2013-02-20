@@ -531,7 +531,7 @@ void calculate_trapezoid_for_block(block_t *block, float entry_factor, float exi
 #endif //EXTRUDER_ADVANCE
 		  }
 	  CRITICAL_SECTION_END;
-	  
+	  }
 #endif // end of new estimates vs old
 	  
 #ifdef TRACE_REPLAN_ADVANCE
