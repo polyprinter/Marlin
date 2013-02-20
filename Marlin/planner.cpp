@@ -1679,20 +1679,33 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
   SERIAL_ECHO_START;
    SERIAL_ECHOPGM("i adv:");
    SERIAL_ECHO(block->advance);
+
    SERIAL_ECHOPGM(" nom:");
 	SERIAL_ECHO(block->nominal_rate);
-	SERIAL_ECHOPGM(" acc:");
-	SERIAL_ECHO(block->acceleration_st);
+
+	//SERIAL_ECHOPGM(" acc:");
+	//SERIAL_ECHO(block->acceleration_st);
+
 	SERIAL_ECHOPGM(" bldist:");
 	SERIAL_ECHO(block->millimeters);
-	SERIAL_ECHOPGM(" accdist:");
-	{
-	long acc_distx = estimate_acceleration_distance( 0, block->nominal_rate, block->acceleration_st );
-	SERIAL_ECHO(acc_distx);
-	}
 
-	SERIAL_ECHOPGM(" advrate:");
-   SERIAL_ECHOLN(block->advance_rate);
+	SERIAL_ECHOPGM( " steps:" );
+	SERIAL_ECHO(     step_event_count );
+
+	SERIAL_ECHOPGM( " steps_e:" );
+	SERIAL_ECHO(      block->steps_e );
+
+	SERIAL_ECHOPGM( " e/mm:" );
+	SERIAL_ECHO(      (float)block->steps_e/(float)block->millimeters );
+
+	//SERIAL_ECHOPGM(" accdist:");
+	//{
+	//long acc_distx = estimate_acceleration_distance( 0, block->nominal_rate, block->acceleration_st );
+	//SERIAL_ECHO(acc_distx);
+	//}
+
+	SERIAL_ECHOPGM( " advrate:" );
+   SERIAL_ECHOLN(    block->advance_rate);
  #endif
 #endif // EXTRUDER_ADVANCE
 
