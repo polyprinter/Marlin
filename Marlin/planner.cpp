@@ -1674,7 +1674,7 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
 #endif
 
   }
-#define TRACE_ADVANCE  
+//#define TRACE_ADVANCE  
  #ifdef TRACE_ADVANCE
   SERIAL_ECHO_START;
    SERIAL_ECHOPGM("i adv:");
@@ -1690,7 +1690,7 @@ void plan_buffer_line(const float &x, const float &y, const float &z, const floa
 	SERIAL_ECHO(block->millimeters);
 
 	SERIAL_ECHOPGM( " steps:" );
-	SERIAL_ECHO(     step_event_count );
+	SERIAL_ECHO(     block->step_event_count );
 
 	SERIAL_ECHOPGM( " steps_e:" );
 	SERIAL_ECHO(      block->steps_e );
