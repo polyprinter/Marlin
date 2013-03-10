@@ -322,6 +322,7 @@ const bool Z_ENDSTOPS_INVERTING = false; // set to true to invert the logic of t
 
 //#define FLOAT_ESTIMATES  // defining this will cause the older slow float functions to be used instead of the newer faster int calcs
 //#define ORIGINAL_TRAPEZOID  // defining this will revert the trapezoid calcs to the original method
+// The new planner is still too conservative - it doesn't get re-planned effectively
 #define ORIGINAL_PLANNER // defining this will revert planning decisions to the original methods
 #define ORIGINAL_PLANNER_DELTA  // only have a choice in this when doing new planning, not old (old always does it the old way)
 
