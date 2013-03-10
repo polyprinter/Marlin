@@ -1331,18 +1331,27 @@ void process_commands()
       if(code_seen('B')) minsegmenttime = code_value() ;
 		
 		if (code_seen('X') ) {
+#ifdef ORIGINAL_PLANNER
 			max_xy_jerk = code_value() ;
+#else
 			max_axis_jerk[X_AXIS] = max_axis_jerk[Y_AXIS] = max_xy_jerk;
+#endif
 			}
 
 		if(code_seen('Z')) {
+#ifdef ORIGINAL_PLANNER
 			max_z_jerk = code_value() ;
+#else
 			max_axis_jerk[Z_AXIS] = max_z_jerk;
+#endif
 			}
 
 		if(code_seen('E')) {
+#ifdef ORIGINAL_PLANNER
 			max_e_jerk = code_value() ;
+#else
 			max_axis_jerk[E_AXIS] = max_e_jerk;
+#endif
 			}
 
     }
@@ -1503,6 +1512,7 @@ void process_commands()
       PID_autotune(temp, e, c);
     }
     break;
+
 	 #ifdef EXTRUDER_ADVANCE
     case 305: // M305 AadvanceFactor*1000 e.g. 100 for a value of .100
       {
@@ -1513,6 +1523,14 @@ void process_commands()
         SERIAL_PROTOCOL(extruder_advance_k * 1000);
         SERIAL_PROTOCOLLN("");
 			}
+      }
+      break;
+    #endif //EXTRUDER_ADVANCE
+
+#ifdef DEBUG_VARS
+	case 306: // M306 debug vars
+      {
+
 		if (code_seen( 'I' ) ) {
 			extruder_debug_i = code_value();
 		  SERIAL_PROTOCOL(" I:");
@@ -1531,16 +1549,16 @@ void process_commands()
         SERIAL_PROTOCOL(extruder_debug_k);
         SERIAL_PROTOCOLLN("");
 			}
-
       }
       break;
-    #endif //PIDTEMP
+#endif // DEBUG_VARS
 
     case 400: // M400 finish all moves
     {
       st_synchronize();
     }
     break;
+
     case 500: // Store settings in EEPROM
     {
         EEPROM_StoreSettings();
